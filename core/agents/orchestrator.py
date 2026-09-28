@@ -34,9 +34,11 @@ class Orchestrator:
         sem = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
 
         async def _bounded(agent: BaseAgent) -> List[Finding]:
+            if on_event:
+                on_event(agent.name, "dispatched")
             async with sem:
                 if on_event:
-                    on_event(agent.name, "dispatched")
+                    on_event(agent.name, "reporting")
                 try:
                     findings = await asyncio.wait_for(agent.run(target), timeout=self.timeout)
                 except asyncio.TimeoutError:
