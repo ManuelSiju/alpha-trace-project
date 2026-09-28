@@ -94,7 +94,7 @@ if target is not None:
     st.session_state.target = target
     st.session_state.session_id = sid
     with st.spinner("Gathering intelligence across agents..."):
-        orch = Orchestrator(build_default_agents())
+        orch = Orchestrator(build_default_agents(), cache=sessions)
         t0 = time.monotonic()
         findings = asyncio.run(orch.run_all(target))
         elapsed = time.monotonic() - t0

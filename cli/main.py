@@ -130,7 +130,7 @@ def _ollama_status(c: Console) -> None:
 
 
 def _run(target: Target) -> Briefing:
-    orch = Orchestrator(build_default_agents())
+    orch = Orchestrator(build_default_agents(), cache=sessions)
     t0 = time.monotonic()
     with Progress(SpinnerColumn(), TextColumn("[#a8b5ff]{task.description}[/]"), TimeElapsedColumn(), transient=True, console=console) as p:
         tid = p.add_task("Gathering intelligence...", start=True)

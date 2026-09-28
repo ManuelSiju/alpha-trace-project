@@ -15,6 +15,7 @@ class BaseAgent(ABC):
     def __init__(self) -> None:
         self.last_run: datetime | None = None
         self.last_error: str | None = None
+        self.cache = None  # optional SessionStore-like cache; set by Orchestrator.run_all
 
     @abstractmethod
     async def gather(self, target: Target) -> List[Finding]:

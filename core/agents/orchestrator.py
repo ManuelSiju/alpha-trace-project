@@ -12,13 +12,17 @@ from core.agents.base_agent import BaseAgent
 class Orchestrator:
     """Fan-out runner. Each agent gets a timeout; errors isolated per-agent."""
 
-    def __init__(self, agents: List[BaseAgent], timeout: int | None = None):
+    def __init__(self, agents: List[BaseAgent], timeout: int | None = None, cache=None):
         self.agents = agents
         self.timeout = timeout or settings.AGENT_TIMEOUT
+        self.cache = cache
 
     async def run_all(self, target: Target) -> List[Finding]:
         if not self.agents:
             return []
+
+        for a in self.agents:
+            a.cache = self.cache
 
         sem = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
 
