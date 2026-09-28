@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field, EmailStr
@@ -57,7 +57,7 @@ class Finding(BaseModel):
     url: Optional[str] = None
     confidence: int = Field(default=50, ge=0, le=100)
     data: Dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class BriefingCategory(BaseModel):
@@ -78,7 +78,7 @@ class Briefing(BaseModel):
     medium_confidence_pct: int = 0
     low_confidence_pct: int = 0
     elapsed_seconds: float = 0.0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     raw_findings: List[Finding] = Field(default_factory=list)
 
     @classmethod
@@ -91,5 +91,5 @@ class SessionRecord(BaseModel):
     target: Target
     briefing: Optional[Briefing] = None
     chat_history: List[Dict[str, str]] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

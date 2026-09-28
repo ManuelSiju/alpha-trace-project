@@ -9,7 +9,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Prompt, Confirm
-from rich.table import Table
 from rich import box
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -23,13 +22,14 @@ from core.models.schema import Target, Briefing
 from core.agents.orchestrator import Orchestrator, build_default_agents
 from core.analyzers.profile_synthesizer import synthesize, chat
 from core.analyzers.entity_resolver import dedupe_findings
-from core.memory.session_manager import SessionManager
+from core.memory.session_store import SessionStore, sweep_stale_sessions
 from core.llm.ollama_client import get_llm, OllamaUnavailable
 from config.settings import settings
 
 
 console = Console()
-sessions = SessionManager()
+sessions = SessionStore()
+sweep_stale_sessions()
 
 
 @click.group()
@@ -91,36 +91,6 @@ def interactive() -> None:
     investigate.callback(email=None, phone=None, name=None, username=None,
                          domain=None, company=None, location=None,
                          image_path=None, no_chat=False)
-
-
-@cli.command(name="list")
-def list_sessions() -> None:
-    """List saved sessions."""
-    setup_logging()
-    sids = sessions.list_sessions()
-    if not sids:
-        console.print("[#6b6b6b](no sessions)[/]")
-        return
-    t = Table(box=box.MINIMAL_DOUBLE_HEAD)
-    t.add_column("Session", style="#a8b5ff")
-    t.add_column("Target", style="#ffffff")
-    for sid in sids:
-        rec = sessions.load(sid)
-        if rec:
-            t.add_row(sid, rec.target.primary_identifier())
-    console.print(t)
-
-
-@cli.command()
-@click.argument("session_id")
-def show(session_id: str) -> None:
-    """Show a saved briefing."""
-    setup_logging()
-    rec = sessions.load(session_id)
-    if not rec or not rec.briefing:
-        console.print(f"{INDICATORS['error']} Session not found or no briefing")
-        return
-    _render(rec.briefing)
 
 
 def _ollama_status(c: Console) -> None:
@@ -219,8 +189,8 @@ def _chat_loop(briefing: Briefing, session_id: str) -> None:
     console.print()
     console.print(Panel.fit(
         f"[bold #7dd87d]SESSION CLOSED[/]\n"
-        f"Session file removed: [{'#7dd87d' if result['session_removed'] else '#ffb86b'}]{result['session_removed']}[/]\n"
-        f"Cache rows wiped:     [#a8b5ff]{result['cache_rows_removed']}[/]\n"
+        f"Session record removed: [{'#7dd87d' if result['session_removed'] else '#ffb86b'}]{result['session_removed']}[/]\n"
+        f"Cache files wiped:      [#a8b5ff]{result['cache_files_removed']}[/]\n"
         "[#6b6b6b]No gathered data retained on disk.[/]",
         border_style="#7dd87d",
         box=box.ROUNDED,

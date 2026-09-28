@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from loguru import logger
@@ -21,7 +21,7 @@ class BaseAgent(ABC):
         ...
 
     async def run(self, target: Target) -> List[Finding]:
-        self.last_run = datetime.utcnow()
+        self.last_run = datetime.now(timezone.utc)
         try:
             findings = await self.gather(target)
             logger.info(f"[{self.name}] returned {len(findings)} finding(s)")

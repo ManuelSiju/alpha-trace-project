@@ -14,7 +14,7 @@ from core.models.schema import Briefing
 from core.agents.orchestrator import Orchestrator, build_default_agents
 from core.analyzers.profile_synthesizer import synthesize
 from core.analyzers.entity_resolver import dedupe_findings
-from core.memory.session_manager import SessionManager
+from core.memory.session_store import SessionStore, sweep_stale_sessions
 from core.llm.ollama_client import get_llm, OllamaUnavailable
 from config.settings import settings
 
@@ -26,6 +26,11 @@ from gui.components.timeline_panel import render as render_timeline
 
 
 setup_logging()
+
+if "store" not in st.session_state:
+    sweep_stale_sessions()
+    st.session_state.store = SessionStore()
+sessions = st.session_state.store
 
 st.set_page_config(page_title="Alpha-Tracer", page_icon="🔎", layout="wide")
 
@@ -67,9 +72,8 @@ with st.sidebar:
     if st.button("End session & wipe data", use_container_width=True):
         sid = st.session_state.get("session_id")
         if sid:
-            from core.memory.session_manager import SessionManager as _SM
-            res = _SM().purge_session(sid)
-            st.success(f"Wiped. session_removed={res['session_removed']} cache_rows={res['cache_rows_removed']}")
+            res = sessions.purge_session(sid)
+            st.success(f"Case closed. Session data destroyed. (cache files wiped: {res['cache_files_removed']})")
         st.session_state.briefing = None
         st.session_state.target = None
         st.session_state.session_id = None
@@ -78,7 +82,6 @@ with st.sidebar:
         st.rerun()
 
 
-sessions = SessionManager()
 if "briefing" not in st.session_state:
     st.session_state.briefing = None
 if "target" not in st.session_state:
