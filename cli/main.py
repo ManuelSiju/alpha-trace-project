@@ -23,6 +23,7 @@ from core.agents.orchestrator import Orchestrator, build_default_agents
 from core.analyzers.profile_synthesizer import synthesize, chat
 from core.analyzers.entity_resolver import dedupe_findings
 from core.memory.session_store import SessionStore, sweep_stale_sessions
+from core.utils.keypress import press_any_key, prompt_single_key
 from core.llm.ollama_client import get_llm, OllamaUnavailable
 from config.settings import settings
 
@@ -50,44 +51,70 @@ def cli() -> None:
 def investigate(email, phone, name, username, domain, company, location, image_path, no_chat) -> None:
     """Run a new investigation."""
     setup_logging()
-    console.clear()
-    display_logo(console)
-    console.print()
 
-    ids = {k: v for k, v in {
+    initial_ids = {k: v for k, v in {
         "email": email, "phone": phone, "name": name,
         "username": username, "domain": domain, "company": company,
         "location": location, "image_path": image_path,
     }.items() if v}
 
-    if not ids:
-        console.print(f"{INDICATORS['info']} Interactive identifier capture")
-        kind = Prompt.ask("Identifier type", choices=["email", "phone", "name", "username", "domain", "company"], default="email")
-        val = Prompt.ask(f"Enter {kind}")
-        ids[kind] = val
+    first_case = True
+    while True:
+        console.clear()
+        display_logo(console)
+        console.print()
 
-    target = Target(**ids)
-    session_id = sessions.new_session(target)
+        ids = dict(initial_ids) if first_case else {}
+        if not ids:
+            console.print(f"{INDICATORS['info']} Interactive identifier capture")
+            kind = Prompt.ask("Identifier type", choices=["email", "phone", "name", "username", "domain", "company"], default="email")
+            val = Prompt.ask(f"Enter {kind}")
+            ids[kind] = val
 
-    console.print(create_data_panel("Target Identifiers", {k: v for k, v in ids.items() if v}))
-    console.print()
-    _ollama_status(console)
-    display_separator(console=console)
+        target = Target(**ids)
+        session_id = sessions.new_session(target)
 
-    briefing = _run(target)
-    sessions.save_briefing(session_id, briefing)
+        console.print(create_data_panel("Target Identifiers", {k: v for k, v in ids.items() if v}))
+        console.print()
+        _ollama_status(console)
+        display_separator(console=console)
 
-    _render(briefing)
-    _render_full_text_dump(briefing)
-    console.print(f"{INDICATORS['info']} Session: [#a8b5ff]{session_id}[/]")
+        briefing = _run(target)
+        sessions.save_briefing(session_id, briefing)
 
-    if not no_chat:
+        _render(briefing)
+        _render_full_text_dump(briefing)
+        console.print(f"{INDICATORS['info']} Session: [#a8b5ff]{session_id}[/]")
+
+        if no_chat:
+            sessions.purge_session(session_id, wipe_cache=True)
+            return
+
         _chat_loop(briefing, session_id)
+
+        try:
+            choice = prompt_single_key(
+                "\n[bold #a8b5ff][N][/] Open a new case   [bold #a8b5ff][Q][/] Close the case file  > ",
+                {"n": "open a new case", "q": "close the case file"},
+            )
+        except (EOFError, KeyboardInterrupt):
+            choice = "q"
+
+        result = sessions.purge_session(session_id, wipe_cache=True)
+        if choice == "q":
+            _print_case_closed(result)
+            return
+
+        first_case = False
 
 
 @cli.command()
 def interactive() -> None:
     """Full guided session."""
+    console.clear()
+    display_logo(console)
+    console.print()
+    press_any_key(f"{INDICATORS['info']} Press any key to open a new case...")
     investigate.callback(email=None, phone=None, name=None, username=None,
                          domain=None, company=None, location=None,
                          image_path=None, no_chat=False)
@@ -157,17 +184,21 @@ def _render(b: Briefing) -> None:
     display_separator(console=console)
 
 
-END_COMMANDS = {"end", "end session", "/end", "quit", "exit", "q", ":q", "bye", "stop"}
+END_COMMANDS = {"end", "end session", "/end", "/done", "quit", "exit", "q", ":q", "bye", "stop"}
 
 
 def _chat_loop(briefing: Briefing, session_id: str) -> None:
+    """Q&A loop. Ends when the user types an END_COMMAND, Ctrl-C, or Ctrl-D.
+
+    Does not purge — the caller decides what to do next ([N]/[Q]), and both
+    of those choices purge, per the session-store contract.
+    """
     history: list[dict] = []
     console.print()
     console.print(Panel.fit(
         "[bold #c4ccff]CHAT SESSION ACTIVE[/]\n"
         "Ask anything about the gathered intelligence.\n"
-        f"Type [#a8b5ff]end[/] or [#a8b5ff]end session[/] to close — "
-        "[#ff6b7a]all session data + cache will be wiped[/].",
+        f"Type [#a8b5ff]/done[/] (or [#a8b5ff]end[/]) to close this case.",
         border_style="#a8b5ff",
         box=box.ROUNDED,
     ))
@@ -184,17 +215,22 @@ def _chat_loop(briefing: Briefing, session_id: str) -> None:
         history.append({"question": q, "answer": ans})
         sessions.append_chat(session_id, q, ans)
 
-    # End: purge
-    result = sessions.purge_session(session_id, wipe_cache=True)
-    console.print()
-    console.print(Panel.fit(
-        f"[bold #7dd87d]SESSION CLOSED[/]\n"
-        f"Session record removed: [{'#7dd87d' if result['session_removed'] else '#ffb86b'}]{result['session_removed']}[/]\n"
-        f"Cache files wiped:      [#a8b5ff]{result['cache_files_removed']}[/]\n"
-        "[#6b6b6b]No gathered data retained on disk.[/]",
-        border_style="#7dd87d",
-        box=box.ROUNDED,
-    ))
+
+def _print_case_closed(result: dict) -> None:
+    if result["session_removed"]:
+        console.print(Panel.fit(
+            "[bold #7dd87d]Case closed. Session data destroyed.[/]\n"
+            f"[#6b6b6b]cache files wiped: {result['cache_files_removed']}[/]",
+            border_style="#7dd87d",
+            box=box.ROUNDED,
+        ))
+    else:
+        console.print(Panel.fit(
+            "[bold #ffb86b]Session purge could not be verified — "
+            "no in-memory record was found to remove.[/]",
+            border_style="#ffb86b",
+            box=box.ROUNDED,
+        ))
 
 
 def _render_full_text_dump(b: Briefing) -> None:
