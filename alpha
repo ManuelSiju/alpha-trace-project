@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Alpha-Tracer launcher (Linux/macOS). Provisions everything via uv, then runs the app.
+# No sudo/admin required anywhere in this script.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+UV_MANUAL_INSTALL='curl -LsSf https://astral.sh/uv/install.sh | sh'
+
+if ! command -v uv >/dev/null 2>&1; then
+    echo "uv (Python packaging tool) not found — installing it for your user account only..."
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "curl is required to install uv automatically, and was not found on this system."
+        echo "Install uv manually for your OS, then re-run ./alpha:"
+        echo "  $UV_MANUAL_INSTALL"
+        echo "  (see https://docs.astral.sh/uv/getting-started/installation/ for other options)"
+        exit 1
+    fi
+    if ! curl -LsSf https://astral.sh/uv/install.sh | sh; then
+        echo "Could not install uv automatically."
+        echo "Install it manually, then re-run ./alpha:"
+        echo "  $UV_MANUAL_INSTALL"
+        exit 1
+    fi
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "uv was installed but isn't on PATH in this shell."
+        echo "Open a new terminal (so your shell picks up the updated PATH) and re-run ./alpha."
+        exit 1
+    fi
+fi
+
+if [ ! -d ".venv" ]; then
+    echo "Creating virtual environment (.venv) with Python 3.11 via uv..."
+    uv venv --python 3.11 .venv
+fi
+
+echo "Installing dependencies..."
+uv pip install --python .venv/bin/python -r requirements.txt
+
+MARKER=".venv/.playwright_installed"
+if [ ! -f "$MARKER" ]; then
+    echo "Installing Playwright's Chromium (one-time, optional — used only for LinkedIn scraping)..."
+    if .venv/bin/python -m playwright install chromium; then
+        touch "$MARKER"
+    else
+        echo "Warning: Playwright Chromium install failed or was skipped. Alpha-Tracer will still run;"
+        echo "this only affects the optional LinkedIn-scraping path."
+    fi
+fi
+
+if ! command -v ollama >/dev/null 2>&1; then
+    echo
+    echo "Note: 'ollama' was not found on PATH. Alpha-Tracer will still run using a"
+    echo "deterministic fallback briefing, but for LLM-powered analysis, install it:"
+    case "$(uname -s)" in
+        Darwin) echo "  brew install ollama   (or: curl -fsSL https://ollama.com/install.sh | sh)" ;;
+        Linux)  echo "  curl -fsSL https://ollama.com/install.sh | sh" ;;
+        *)      echo "  see https://ollama.com/download" ;;
+    esac
+    echo
+fi
+
+exec .venv/bin/python main.py "$@"
