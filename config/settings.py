@@ -14,12 +14,8 @@ class Settings(BaseSettings):
     )
 
     BASE_DIR: Path = Path(__file__).parent.parent
-    DATA_DIR: Path = BASE_DIR / "data"
     OUTPUT_DIR: Path = BASE_DIR / "outputs"
     ASSETS_DIR: Path = BASE_DIR / "assets"
-    CACHE_DIR: Path = DATA_DIR / "cache"
-    SESSION_DIR: Path = DATA_DIR / "sessions"
-    DB_PATH: Path = DATA_DIR / "databases" / "alpha_tracer.db"
     LOG_FILE: Path = BASE_DIR / "alpha_tracer.log"
 
     OLLAMA_HOST: str = "http://localhost:11434"
@@ -70,7 +66,6 @@ class Settings(BaseSettings):
     SHERLOCK_TIMEOUT: int = 240
     SHERLOCK_PER_SITE_TIMEOUT: int = 8
 
-    ENABLE_CACHE: bool = True
     CACHE_TTL: int = 3600
 
     GENERATE_PDF_REPORTS: bool = True
@@ -78,7 +73,6 @@ class Settings(BaseSettings):
     SAVE_RAW_DATA: bool = True
 
     LOG_LEVEL: str = "INFO"
-    MASK_SENSITIVE_DATA: bool = True
 
     SHODAN_API_KEY: Optional[str] = None
     HAVEIBEENPWNED_API_KEY: Optional[str] = None
@@ -90,12 +84,8 @@ class Settings(BaseSettings):
 settings = Settings()
 
 for d in (
-    settings.DATA_DIR,
     settings.OUTPUT_DIR,
     settings.ASSETS_DIR,
-    settings.CACHE_DIR,
-    settings.SESSION_DIR,
-    settings.DB_PATH.parent,
     settings.OUTPUT_DIR / "reports",
 ):
     d.mkdir(parents=True, exist_ok=True)
