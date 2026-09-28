@@ -25,7 +25,7 @@ class PeopleSearchAgent(BaseAgent):
             import httpx
             from core.utils.user_agent_rotator import default_headers
         except ImportError:
-            return []
+            return [self._no_source("the 'httpx' library is not installed")]
 
         url = "https://archive.org/wayback/available"
         candidates = [target.name]
@@ -52,4 +52,20 @@ class PeopleSearchAgent(BaseAgent):
                             ))
                 except Exception as e:
                     logger.debug(f"wayback failed: {e}")
+
+        if not findings:
+            findings.append(self._no_source(
+                "no comprehensive people-search or public-records source is configured "
+                "(data-broker/people-search-site scraping is intentionally excluded by design); "
+                "checked public web-archive availability only, no snapshot found"
+            ))
         return findings
+
+    def _no_source(self, reason: str) -> Finding:
+        return Finding(
+            category=self.category,
+            source="people-search",
+            title="No people-search source configured",
+            content=reason.capitalize() + ".",
+            confidence=0,
+        )

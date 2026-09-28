@@ -20,7 +20,7 @@ class PhoneAgent(BaseAgent):
             from phonenumbers import geocoder, carrier, timezone
         except ImportError:
             logger.warning("phonenumbers not installed")
-            return []
+            return [self._no_source("the 'phonenumbers' library is not installed")]
 
         try:
             parsed = phonenumbers.parse(target.phone, None)
@@ -61,3 +61,15 @@ class PhoneAgent(BaseAgent):
                 "international": phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL),
             },
         )]
+
+    def _no_source(self, reason: str) -> Finding:
+        return Finding(
+            category=self.category,
+            source="phone-intelligence",
+            title="No phone-intelligence source configured",
+            content=(
+                f"Structured phone lookup unavailable: {reason}. Alpha-Tracer does not use "
+                "data-broker or people-search sites for phone lookups by design."
+            ),
+            confidence=0,
+        )
