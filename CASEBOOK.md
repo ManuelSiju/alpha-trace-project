@@ -3,8 +3,8 @@
 Alpha-Tracer work tracker — single source of truth for all unfinished work.
 
 **Last updated:** 2026-09-29
-**Overall completion:** 2 / 36 tasks done (~6%)
-**By status:** Done 2 · Open 34 · In Progress 0 · Blocked 0
+**Overall completion:** 3 / 36 tasks done (~8%)
+**By status:** Done 3 · Open 33 · In Progress 0 · Blocked 0
 
 Legend — Priority: P0 (blocking, ordered) · P1 · P2. Status: Open / In Progress / Blocked / Done.
 
@@ -55,7 +55,7 @@ Legend — Priority: P0 (blocking, ordered) · P1 · P2. Status: Open / In Progr
 |----|------|----------|--------|-------|----------------------|-------|
 | SP-1 | Session store redesign: RAM-first by default; disk-backed only via a per-session temp directory encrypted with a random in-memory key (crypto-shred). Replace fixed-path JSON `session_manager.py` + sqlite `cache_manager.py`/`database.py` with this design. | P0 | Open | `core/memory/session_manager.py`, `core/memory/cache_manager.py`, `core/memory/database.py` | No session or cache data exists in plaintext on disk at any point during a run; killing the process mid-run and inspecting disk finds only encrypted bytes (if anything). | Confirmed today: plaintext JSON at fixed path (`session_manager.py:56-57`), plaintext sqlite `http_cache`/`sessions` tables (`database.py:8-24`) at fixed path. Zero hits for `cryptography`/`Fernet`/`shred`/`gc.collect` anywhere. |
 | SP-2 | On `[N]`/`[Q]`/crash-free exit: drop key, delete temp dir, drop references, `gc.collect()`. On every launch, sweep and delete leftover session dirs from crashed runs. | P0 | Open | same as SP-1 | Test simulates a crashed leftover session dir; next launch removes it before starting. Normal exit leaves zero session artifacts on disk. | Depends on SP-1 landing first. |
-| SP-3 | Redact/hash all identifiers (email, username, phone, name, domain) in every logger call; `alpha_tracer.log` must contain zero subject data. | P0 | Open | `core/agents/web_agent.py:44`, `core/agents/social_media_agent.py:112`, `core/agents/username_agent.py:61,65`, `core/utils/logger.py`, `core/utils/validators.py` (`mask_email`) | Grep of a full run's log output for any raw identifier substring used as input returns zero hits. | `mask_email` exists in `validators.py` but is unused at any current log call site — these are the specific call sites confirmed leaking raw query/handle strings. |
+| SP-3 | Redact/hash all identifiers (email, username, phone, name, domain) in every logger call; `alpha_tracer.log` must contain zero subject data. | P0 | Done | `core/utils/validators.py` (`redact`), `core/agents/web_agent.py:45`, `core/agents/social_media_agent.py:113`, `core/agents/username_agent.py:62,66`, `core/agents/github_agent.py:73`, `tests/test_logging_redaction.py` | Grep of a full run's log output for any raw identifier substring used as input returns zero hits. | Fixed all 5 leak sites (the 4 originally audited + `github_agent.py:73`'s `email_search`/`name_search` `val`, found while patching — audit had missed it). Added `validators.redact()` (generic identifier mask, routes emails through existing `mask_email`). 5 new tests in `tests/test_logging_redaction.py`, all passing; full suite 16/16 passing. |
 | SP-4 | README: honest privacy-limits section (swap files, SSD wear leveling, Python memory semantics — no guarantees Python can't deliver). | P1 | Open | `README.md` | Section reviewed and confirmed to make no false "unrecoverable" claims. | Ties to DP-1. |
 | SP-5 | `/export`: only path data leaves the session, only on explicit request, to a user-chosen path. | P2 | Open | `cli/main.py`, new export module | `/export` writes exactly the briefing (and nothing else) to a path the user supplies; no auto-export anywhere else in the app. | Not yet implemented. |
 
@@ -105,6 +105,7 @@ Legend — Priority: P0 (blocking, ordered) · P1 · P2. Status: Open / In Progr
 
 *(newest first)*
 
+- **2026-09-29** — SP-3: redacted all subject identifiers from logger calls (5 sites, incl. one — `github_agent.py` — found beyond the original audit). Added `validators.redact()` + 5 regression tests. 16/16 tests passing.
 - **2026-09-29** — P0.2: Scrubbed the real third-party email (`sankardasdevadas2004@gmail.com`) from `alpha_tracer.log` (deleted, recreated empty), `data/sessions/*.json` (deleted, 3 files), `README.md` (2 lines), `tests/test_agents.py` (3 assertions), `tests/test_email_flow.py` (1 fixture constant) — replaced with synthetic fixture identity `jamiecarter2004@gmail.com` / "Jamie Carter" everywhere a test needed a realistic email+name pair. Verified: repo-wide grep for the real local-part returns zero hits; `python -m pytest -q` → 11 passed.
 - **2026-09-29** — P0.1: `git init`, added `.gitignore` (`.venv/`, `data/`, `*.log`, `.env`, `__pycache__/`, `.pytest_cache/`, session temp dirs), first commit of existing codebase (post-scrub, so no PII ever entered git history).
 - **2026-09-29** — Full codebase audit completed (3 parallel Explore agents: launcher/keypress/UX, sessions/privacy/logging, LLM/agents/tests/deps); CASEBOOK.md created and seeded with every finding.

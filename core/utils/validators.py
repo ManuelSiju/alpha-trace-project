@@ -40,3 +40,19 @@ def mask_email(email: str) -> str:
     else:
         masked = local[0] + "*" * (len(local) - 2) + local[-1]
     return f"{masked}@{dom}"
+
+
+def redact(value: Optional[str]) -> str:
+    """Mask any subject identifier (email, username, phone, name, domain) for log output.
+
+    Never log a raw identifier — this is the single call every logger site should route
+    through when the value being logged came from a Target.
+    """
+    if not value:
+        return "<empty>"
+    s = str(value)
+    if is_email(s):
+        return mask_email(s)
+    if len(s) <= 2:
+        return s[0] + "*"
+    return s[0] + "*" * (len(s) - 2) + s[-1]

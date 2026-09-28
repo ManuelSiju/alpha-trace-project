@@ -11,6 +11,7 @@ from loguru import logger
 
 from core.agents.base_agent import BaseAgent
 from core.models.schema import Target, Finding
+from core.utils.validators import redact
 from config.settings import settings
 
 
@@ -58,11 +59,11 @@ class UsernameAgent(BaseAgent):
                     )
                 except asyncio.TimeoutError:
                     proc.kill()
-                    logger.warning(f"sherlock timeout for {handle}")
+                    logger.warning(f"sherlock timeout for {redact(handle)}")
                     return []
                 text = stdout.decode("utf-8", errors="replace")
             except Exception as e:
-                logger.error(f"sherlock error {handle}: {e}")
+                logger.error(f"sherlock error {redact(handle)}: {e}")
                 return []
 
         hits = []

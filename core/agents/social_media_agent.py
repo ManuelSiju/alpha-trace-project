@@ -8,6 +8,7 @@ from loguru import logger
 from core.agents.base_agent import BaseAgent
 from core.models.schema import Target, Finding
 from core.utils.user_agent_rotator import default_headers
+from core.utils.validators import redact
 from config.settings import settings
 
 
@@ -109,7 +110,7 @@ class SocialMediaAgent(BaseAgent):
                 msg = str(e).lower()
                 if "403" in msg or "login" in msg or "rate" in msg or "checkpoint" in msg:
                     return "blocked"
-                logger.debug(f"instaloader failed for {handle}: {e}")
+                logger.debug(f"instaloader failed for {redact(handle)}: {e}")
                 return None
 
         data = await loop.run_in_executor(None, _fetch)

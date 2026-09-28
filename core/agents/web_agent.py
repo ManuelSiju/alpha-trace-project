@@ -6,6 +6,7 @@ from loguru import logger
 
 from core.agents.base_agent import BaseAgent
 from core.models.schema import Target, Finding
+from core.utils.validators import redact
 
 
 class WebAgent(BaseAgent):
@@ -41,7 +42,7 @@ class WebAgent(BaseAgent):
             try:
                 results = await loop.run_in_executor(None, self._search, q)
             except Exception as e:
-                logger.debug(f"DDG search failed for {q}: {e}")
+                logger.debug(f"DDG search failed for {redact(q)}: {e}")
                 continue
 
             if not results:

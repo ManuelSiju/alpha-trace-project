@@ -7,6 +7,7 @@ from loguru import logger
 from core.agents.base_agent import BaseAgent
 from core.models.schema import Target, Finding
 from core.utils.user_agent_rotator import default_headers
+from core.utils.validators import redact
 
 
 class GitHubAgent(BaseAgent):
@@ -69,5 +70,5 @@ class GitHubAgent(BaseAgent):
                                     data={"items": items[:5]},
                                 ))
                 except Exception as e:
-                    logger.debug(f"github query failed {kind}={val}: {e}")
+                    logger.debug(f"github query failed {kind}={redact(val)}: {e}")
         return findings
