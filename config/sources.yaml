@@ -1,0 +1,66 @@
+social_media:
+  twitter:
+    enabled: true
+    method: snscrape
+    rate_limit_per_minute: 10
+  instagram:
+    enabled: true
+    method: instaloader
+    rate_limit_per_minute: 5
+  linkedin:
+    enabled: false
+    method: playwright
+    note: requires authenticated cookies, ToS-risky
+  facebook:
+    enabled: false
+    note: ToS-risky
+  github:
+    enabled: true
+    method: public_api
+    rate_limit_per_minute: 60
+  reddit:
+    enabled: true
+    method: praw
+    requires_keys: true
+
+osint_tools:
+  sherlock:
+    enabled: true
+    timeout_seconds: 60
+  holehe:
+    enabled: true
+    timeout_seconds: 60
+
+domain_intelligence:
+  whois:
+    enabled: true
+  dns:
+    enabled: true
+  ipwhois:
+    enabled: true
+  crtsh_subdomains:
+    enabled: true
+
+breach_databases:
+  xposedornot:
+    enabled: true
+    endpoint: https://api.xposedornot.com/v1/check-email/{email}
+  haveibeenpwned:
+    enabled: false
+    note: requires paid API key
+
+image_intelligence:
+  exif:
+    enabled: true
+  reverse_search:
+    enabled: false
+    note: no working free OSS option
+
+web_archives:
+  wayback_machine:
+    enabled: true
+
+web_search:
+  duckduckgo:
+    enabled: true
+    max_results: 15

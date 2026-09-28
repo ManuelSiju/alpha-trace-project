@@ -1,0 +1,16 @@
+/* alpha-tracer streamlit theme overrides */
+body, .stApp {
+    background-color: #0e0f14 !important;
+    color: #e6e6e6;
+}
+h1, h2, h3 { color: #c4ccff; }
+.stButton > button {
+    background: #1c1f2a;
+    color: #c4ccff;
+    border: 1px solid #2a2a2a;
+}
+.stButton > button:hover { border-color: #a8b5ff; color: #ffffff; }
+.metric-card {
+    background: #15171f; border: 1px solid #2a2a2a; border-radius: 8px;
+    padding: 12px 16px;
+}
