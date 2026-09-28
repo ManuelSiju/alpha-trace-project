@@ -3,10 +3,10 @@
 Alpha-Tracer work tracker — single source of truth for all unfinished work.
 
 **Last updated:** 2026-09-29
-**Overall completion:** 22 / 36 tasks done (~61%)
-**By status:** Done 22 · Open 14 · In Progress 0 · Blocked 0
+**Overall completion:** 23 / 36 tasks done (~64%)
+**By status:** Done 23 · Open 13 · In Progress 0 · Blocked 0
 
-All P0 items are Done. LA-1..LA-5, AG-1, AG-2, AG-3/TS-2 are Done.
+All P0 items are Done. LA-1..LA-5, AG-1, AG-2, AG-3/TS-2, TS-1 are Done.
 
 Legend — Priority: P0 (blocking, ordered) · P1 · P2. Status: Open / In Progress / Blocked / Done.
 
@@ -72,7 +72,7 @@ Legend — Priority: P0 (blocking, ordered) · P1 · P2. Status: Open / In Progr
 
 | ID | Task | Priority | Status | Files | Acceptance criteria | Notes |
 |----|------|----------|--------|-------|----------------------|-------|
-| TS-1 | Autouse pytest fixture that blocks real sockets, so the suite is verifiably fully offline. | P2 | Open | `tests/conftest.py` | A test that attempts a real HTTP/socket call fails loudly under this fixture; existing 11 tests still pass. | `tests/conftest.py` is 4 lines today (just `sys.path` setup) — no network mocking at all. |
+| TS-1 | Autouse pytest fixture that blocks real sockets, so the suite is verifiably fully offline. | P2 | Done | `tests/conftest.py` (`_block_real_network`, autouse), `tests/test_network_isolation.py` | A test that attempts a real HTTP/socket call fails loudly under this fixture; existing 11 tests still pass. | Monkeypatches `socket.socket.connect`/`connect_ex` to raise `NetworkDisabledError`, applied to every test automatically. Ran the entire suite (75 tests at the time) with it active before adding anything else — all passed unchanged, confirming every existing test was already properly mocked (no hidden real-network dependencies anywhere). Added 2 tests proving the block itself actually fires on a real socket. |
 | TS-2 | Per-agent failure-path tests for the 8 untested agents (tracked as AG-3 — duplicate cross-reference). | P1 | Done | `tests/` | See AG-3. | Landed with AG-3. |
 | TS-3 | Orchestrator timeout test (agent exceeds `AGENT_TIMEOUT`, orchestrator returns empty for that agent without failing the run). | P2 | Open | `tests/test_agents.py` | Test simulates a slow agent exceeding timeout; asserts orchestrator continues and returns other agents' findings. | `Orchestrator.run_all` already has timeout logic (`orchestrator.py:28-31`) but no dedicated test for the timeout branch itself (only error-isolation is tested). |
 | TS-4 | Purge-on-end test: session dir, cache, and logs are verifiably empty/gone after `[N]`/`[Q]`. | P0 | Done | `tests/test_session_purge.py` | Test asserts zero files remain in the session temp dir and zero identifier strings remain in any log after purge. | Rewritten for `SessionStore`: in-memory purge, encrypted-cache-dir purge, plaintext-scan (asserts no raw identifier bytes anywhere under the temp base dir even before purge, since the cache is encrypted from the moment it's written), and crash-dir sweep. Still need an end-to-end test wired through `[N]`/`[Q]` itself once CF-3 lands — tracked there. |
@@ -109,6 +109,7 @@ Legend — Priority: P0 (blocking, ordered) · P1 · P2. Status: Open / In Progr
 
 *(newest first)*
 
+- **2026-09-29** — TS-1: autouse socket-blocking fixture in `tests/conftest.py` — every test now runs with real network access hard-disabled. Ran the full suite (75 tests) with it active before touching anything else: all passed unchanged, confirming the suite was already fully offline. 2 new tests prove the block itself fires.
 - **2026-09-29** — AG-3/TS-2: offline failure-path tests for the remaining 6 untested agents (Username, Domain, Breach, Image, SocialMedia, GitHub) — all 10 agents now have real test coverage. 23 new tests in `tests/test_agents_offline.py`, all offline via mocking (no real sockets). Verified PIL's actual `_getexif()` behavior on a real JPEG before writing the no-EXIF assertion, rather than assuming.
 - **2026-09-29** — AG-2: PhoneAgent/PeopleSearchAgent now surface an explicit "no source configured" status (confidence 0) when their one real capability is unavailable (missing dependency, or — for PeopleSearchAgent — the wayback-archive check finding nothing), distinguishable from a genuine "searched, found nothing" result which still returns normally. No new sources added (data-broker/people-search scraping stays excluded by design). 6 new tests.
 - **2026-09-29** — AG-1: WebAgent reliability. Confirmed via the installed `ddgs` source that `backend="auto"` already fans out across 9 real search engines internally, so the real gap was retry/timeout/cache/explicit-failure, not engine fallback. Added `tenacity` retry (finally used — was an unused dependency), a shared 20s timeout, an explicit "Web search unavailable" Finding on total failure, and per-query caching via a new optional `agent.cache` wired through `Orchestrator.run_all()` from the session store. 6 new tests; manually verified against the real library.
