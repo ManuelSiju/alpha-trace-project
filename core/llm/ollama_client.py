@@ -74,6 +74,7 @@ class OllamaClient:
         options: Dict[str, Any] = {
             "temperature": temperature if temperature is not None else settings.LLM_TEMPERATURE,
             "num_predict": max_tokens or settings.LLM_MAX_TOKENS,
+            "num_ctx": settings.OLLAMA_NUM_CTX,
         }
         kwargs: Dict[str, Any] = {"model": self.model, "messages": messages, "options": options}
         if json_mode:

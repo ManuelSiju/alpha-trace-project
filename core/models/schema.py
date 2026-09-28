@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
@@ -50,6 +51,7 @@ class Target(BaseModel):
 
 
 class Finding(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
     category: str
     source: str
     title: Optional[str] = None
@@ -66,6 +68,7 @@ class BriefingCategory(BaseModel):
     confidence: int = 0
     sources: int = 0
     details: List[str] = Field(default_factory=list)
+    evidence_ids: List[str] = Field(default_factory=list)
 
 
 class Briefing(BaseModel):

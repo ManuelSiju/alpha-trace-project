@@ -25,9 +25,13 @@ class Settings(BaseSettings):
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:3b-instruct"
     OLLAMA_FALLBACK_MODEL: str = "phi3.5:3.8b"
+    OLLAMA_NUM_CTX: int = 8192
     LLM_TEMPERATURE: float = 0.6
     LLM_MAX_TOKENS: int = 2000
     LLM_TIMEOUT: int = 120
+
+    MAX_FINDINGS_PER_CATEGORY: int = 10
+    CHAT_TOP_K_EVIDENCE: int = 8
 
     USER_AGENTS: List[str] = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

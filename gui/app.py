@@ -13,7 +13,6 @@ from core.utils.logger import setup_logging
 from core.models.schema import Briefing
 from core.agents.orchestrator import Orchestrator, build_default_agents
 from core.analyzers.profile_synthesizer import synthesize
-from core.analyzers.entity_resolver import dedupe_findings
 from core.memory.session_store import SessionStore, sweep_stale_sessions
 from core.llm.preflight import check_ollama
 
@@ -98,7 +97,6 @@ if target is not None:
         orch = Orchestrator(build_default_agents())
         t0 = time.monotonic()
         findings = asyncio.run(orch.run_all(target))
-        findings = dedupe_findings(findings)
         elapsed = time.monotonic() - t0
     with st.spinner("Synthesizing briefing via local LLM..."):
         briefing = synthesize(target, findings, elapsed=elapsed)

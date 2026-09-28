@@ -8,6 +8,8 @@ from loguru import logger
 
 from core.models.schema import Target, Finding, Briefing, BriefingCategory
 from core.llm.ollama_client import get_llm, OllamaUnavailable
+from core.analyzers.entity_resolver import dedupe_findings
+from config.settings import settings
 
 # Exact 4-digit years — used to build the allowlist of years actually in findings.
 _YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
@@ -54,15 +56,37 @@ def _years_by_category(findings: List[Finding]) -> dict[str, set[str]]:
     return out
 
 
-def _allowed_years(cat_name: str, years_by_cat: dict[str, set[str]], fallback: set[str]) -> set[str]:
+def _match_category(cat_name: str, by_cat: dict, fallback):
+    """Fuzzy category-name match: exact, or substring either direction. Small
+    models paraphrase category names, so an exact-only match would silently
+    drop years/evidence-ids for anything it renamed."""
     cn = (cat_name or "").strip().lower()
     if not cn:
         return fallback
-    for k, v in years_by_cat.items():
+    for k, v in by_cat.items():
         kl = k.lower()
         if cn == kl or cn in kl or kl in cn:
             return v
     return fallback
+
+
+def _allowed_years(cat_name: str, years_by_cat: dict[str, set[str]], fallback: set[str]) -> set[str]:
+    return _match_category(cat_name, years_by_cat, fallback)
+
+
+def _rank_for_llm(findings: List[Finding]) -> List[Finding]:
+    """Deterministic reduction before the LLM ever sees anything: cap each
+    category at MAX_FINDINGS_PER_CATEGORY, keeping the highest-confidence
+    items. Briefing.raw_findings still retains every finding — this only
+    bounds what goes into the prompt/context window."""
+    by_cat: dict[str, list[Finding]] = {}
+    for f in findings:
+        by_cat.setdefault(f.category, []).append(f)
+    ranked: List[Finding] = []
+    for items in by_cat.values():
+        items.sort(key=lambda f: f.confidence, reverse=True)
+        ranked.extend(items[: settings.MAX_FINDINGS_PER_CATEGORY])
+    return ranked
 
 
 def _scrub_years(text: str, sourced_years: set[str]) -> str:
@@ -114,11 +138,17 @@ def _deterministic_categories(findings: List[Finding]) -> list[BriefingCategory]
             confidence=avg_conf,
             sources=len({i.source for i in items}),
             details=[i.content[:160] for i in items[:5]],
+            evidence_ids=[i.id for i in items],
         ))
     return cats
 
 
-def _coerce_categories(cats_raw, years_by_cat: dict[str, set[str]], fallback_years: set[str]) -> list[BriefingCategory]:
+def _coerce_categories(
+    cats_raw,
+    years_by_cat: dict[str, set[str]],
+    fallback_years: set[str],
+    ids_by_cat: dict[str, list[str]],
+) -> list[BriefingCategory]:
     """Tolerantly build BriefingCategory list from LLM output.
 
     Small models sometimes emit category items as bare strings or with
@@ -146,6 +176,7 @@ def _coerce_categories(cats_raw, years_by_cat: dict[str, set[str]], fallback_yea
                 confidence=int(c.get("confidence", 0) or 0),
                 sources=int(c.get("sources", 0) or 0),
                 details=[_scrub_years(str(d), allowed) for d in details],
+                evidence_ids=_match_category(name, ids_by_cat, []),
             ))
         except Exception as e:
             logger.debug(f"skipping bad category item {c!r}: {e}")
@@ -173,12 +204,15 @@ def _fallback_briefing(target: Target, findings: List[Finding], elapsed: float) 
 
 
 def synthesize(target: Target, findings: List[Finding], elapsed: float = 0.0) -> Briefing:
+    findings = dedupe_findings(findings)
     if not findings:
         return Briefing.empty(target.primary_identifier())
 
     t0 = time.monotonic()
+    llm_findings = _rank_for_llm(findings)
     payload = [
         {
+            "id": f.id,
             "category": f.category,
             "source": f.source,
             "title": f.title,
@@ -186,8 +220,11 @@ def synthesize(target: Target, findings: List[Finding], elapsed: float = 0.0) ->
             "url": f.url,
             "confidence": f.confidence,
         }
-        for f in findings
+        for f in llm_findings
     ]
+    ids_by_category: dict[str, list[str]] = {}
+    for f in llm_findings:
+        ids_by_category.setdefault(f.category, []).append(f.id)
 
     try:
         llm = get_llm()
@@ -206,7 +243,7 @@ def synthesize(target: Target, findings: List[Finding], elapsed: float = 0.0) ->
     sourced_years = _sourced_years(findings)
     years_by_cat = _years_by_category(findings)
     cats_raw = result.get("categories", []) if isinstance(result, dict) else []
-    cats = _coerce_categories(cats_raw, years_by_cat, sourced_years)
+    cats = _coerce_categories(cats_raw, years_by_cat, sourced_years, ids_by_category)
     if not cats and findings:
         logger.warning("LLM returned no usable categories; using deterministic categories")
         cats = _deterministic_categories(findings)
@@ -231,10 +268,49 @@ def synthesize(target: Target, findings: List[Finding], elapsed: float = 0.0) ->
     return briefing
 
 
+def _score_finding(finding: Finding, terms: set[str]) -> int:
+    haystack = f"{finding.category} {finding.source} {finding.title or ''} {finding.content}".lower()
+    return sum(1 for t in terms if t in haystack)
+
+
+def top_k_evidence(briefing: Briefing, question: str, k: int | None = None) -> List[Finding]:
+    """Retrieve the k findings most relevant to `question` by keyword overlap,
+    breaking ties by confidence. Keeps chat's per-turn context bounded instead
+    of resending every raw finding regardless of briefing size."""
+    k = k or settings.CHAT_TOP_K_EVIDENCE
+    terms = set(re.findall(r"[a-z0-9]{3,}", question.lower()))
+    scored = [(_score_finding(f, terms) if terms else 0, f.confidence, f) for f in briefing.raw_findings]
+    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    if terms and any(score > 0 for score, _, _ in scored):
+        return [f for score, _, f in scored if score > 0][:k]
+    return [f for _, _, f in scored[:k]]
+
+
 def chat(briefing: Briefing, question: str, history: list[dict] | None = None) -> str:
     try:
         llm = get_llm()
-        return llm.answer_question(question, briefing.model_dump(), history)
+        evidence = top_k_evidence(briefing, question)
+        context = {
+            "target": briefing.target,
+            "overview": briefing.overview,
+            "categories": [
+                {"category": c.category, "summary": c.summary, "confidence": c.confidence}
+                for c in briefing.categories
+            ],
+            "evidence": [
+                {
+                    "id": f.id,
+                    "category": f.category,
+                    "source": f.source,
+                    "title": f.title,
+                    "content": f.content[:400],
+                    "url": f.url,
+                    "confidence": f.confidence,
+                }
+                for f in evidence
+            ],
+        }
+        return llm.answer_question(question, context, history)
     except Exception as e:
         logger.error(f"chat failed: {e}")
         return f"(LLM unavailable: {e})"

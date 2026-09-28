@@ -21,7 +21,6 @@ from core.utils.branding import (
 from core.models.schema import Target, Briefing
 from core.agents.orchestrator import Orchestrator, build_default_agents
 from core.analyzers.profile_synthesizer import synthesize, chat
-from core.analyzers.entity_resolver import dedupe_findings
 from core.memory.session_store import SessionStore, sweep_stale_sessions
 from core.utils.keypress import press_any_key, prompt_single_key
 from core.llm.preflight import check_ollama
@@ -137,7 +136,6 @@ def _run(target: Target) -> Briefing:
         tid = p.add_task("Gathering intelligence...", start=True)
         findings = asyncio.run(orch.run_all(target))
         p.update(tid, completed=True)
-    findings = dedupe_findings(findings)
     elapsed = time.monotonic() - t0
 
     with Progress(SpinnerColumn(), TextColumn("[#a8b5ff]Synthesizing briefing via local LLM...[/]"), transient=True, console=console) as p:
