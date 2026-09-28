@@ -29,5 +29,7 @@ class BaseAgent(ABC):
             return findings
         except Exception as e:
             self.last_error = str(e)
-            logger.exception(f"[{self.name}] failed: {e}")
+            # error(), not exception(): the console sink would otherwise print a
+            # raw traceback to the user, which RL-1 explicitly forbids.
+            logger.error(f"[{self.name}] failed: {e}")
             return []

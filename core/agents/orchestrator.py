@@ -17,7 +17,14 @@ class Orchestrator:
         self.timeout = timeout or settings.AGENT_TIMEOUT
         self.cache = cache
 
-    async def run_all(self, target: Target) -> List[Finding]:
+    async def run_all(self, target: Target, on_event=None) -> List[Finding]:
+        """`on_event(agent_name, status, count=0)` fires for real state
+        transitions only -- 'dispatched' when a run starts, then exactly one
+        terminal call per agent: 'returned' (findings > 0), 'no_trail' (ran
+        cleanly, 0 findings), or 'failed' (timeout, or an error the agent
+        already caught internally). Never simulated or timer-driven -- every
+        call corresponds to something that actually happened.
+        """
         if not self.agents:
             return []
 
@@ -28,11 +35,21 @@ class Orchestrator:
 
         async def _bounded(agent: BaseAgent) -> List[Finding]:
             async with sem:
+                if on_event:
+                    on_event(agent.name, "dispatched")
                 try:
-                    return await asyncio.wait_for(agent.run(target), timeout=self.timeout)
+                    findings = await asyncio.wait_for(agent.run(target), timeout=self.timeout)
                 except asyncio.TimeoutError:
                     logger.warning(f"[{agent.name}] timeout after {self.timeout}s")
+                    if on_event:
+                        on_event(agent.name, "failed")
                     return []
+                if on_event:
+                    if agent.last_error:
+                        on_event(agent.name, "failed")
+                    else:
+                        on_event(agent.name, "returned" if findings else "no_trail", len(findings))
+                return findings
 
         results = await asyncio.gather(*[_bounded(a) for a in self.agents], return_exceptions=False)
         flat: List[Finding] = []

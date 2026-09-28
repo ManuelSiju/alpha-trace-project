@@ -6,9 +6,11 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt, Confirm
+from rich.table import Table
 from rich import box
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -129,13 +131,39 @@ def _ollama_status(c: Console) -> None:
     c.print(line)
 
 
+AGENT_STATUS_LABELS = {
+    "dispatched": ("Dispatched", "#a8b5ff"),
+    "returned": ("Returned", "#7dd87d"),
+    "no_trail": ("No Trail", "#6b6b6b"),
+    "failed": ("Failed", "#ff6b7a"),
+}
+
+
+def _agent_status_table(statuses: dict[str, tuple[str, int]]) -> Table:
+    t = Table(box=box.MINIMAL, show_header=True, header_style="bold #a8b5ff")
+    t.add_column("Operative")
+    t.add_column("Status")
+    t.add_column("Findings", justify="right")
+    for name, (status, count) in statuses.items():
+        label, color = AGENT_STATUS_LABELS.get(status, (status.title(), "#ffffff"))
+        findings_cell = str(count) if status in ("returned", "no_trail") else "-"
+        t.add_row(name, f"[{color}]{label}[/]", findings_cell)
+    return t
+
+
 def _run(target: Target) -> Briefing:
     orch = Orchestrator(build_default_agents(), cache=sessions)
     t0 = time.monotonic()
-    with Progress(SpinnerColumn(), TextColumn("[#a8b5ff]{task.description}[/]"), TimeElapsedColumn(), transient=True, console=console) as p:
-        tid = p.add_task("Gathering intelligence...", start=True)
-        findings = asyncio.run(orch.run_all(target))
-        p.update(tid, completed=True)
+
+    statuses: dict[str, tuple[str, int]] = {a.name: ("dispatched", 0) for a in orch.agents}
+
+    with Live(_agent_status_table(statuses), console=console, refresh_per_second=8, transient=True) as live:
+        def on_event(name: str, status: str, count: int = 0) -> None:
+            statuses[name] = (status, count)
+            live.update(_agent_status_table(statuses))
+
+        findings = asyncio.run(orch.run_all(target, on_event=on_event))
+
     elapsed = time.monotonic() - t0
 
     with Progress(SpinnerColumn(), TextColumn("[#a8b5ff]Synthesizing briefing via local LLM...[/]"), transient=True, console=console) as p:
