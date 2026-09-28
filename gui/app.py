@@ -15,8 +15,7 @@ from core.agents.orchestrator import Orchestrator, build_default_agents
 from core.analyzers.profile_synthesizer import synthesize
 from core.analyzers.entity_resolver import dedupe_findings
 from core.memory.session_store import SessionStore, sweep_stale_sessions
-from core.llm.ollama_client import get_llm, OllamaUnavailable
-from config.settings import settings
+from core.llm.preflight import check_ollama
 
 from gui.components.search_panel import render as render_search
 from gui.components.briefing_panel import render as render_briefing
@@ -60,14 +59,14 @@ with st.sidebar:
     st.markdown("## Alpha-Tracer")
     st.caption("Local LLM · OSS · No paid API")
     st.markdown("---")
-    try:
-        llm = get_llm()
-        ok = llm.health_check()
-        st.success(f"Ollama: {settings.OLLAMA_MODEL}") if ok else st.warning("Ollama offline — fallback mode")
-    except OllamaUnavailable:
-        st.warning("`ollama` package missing")
-    except Exception as e:
-        st.warning(f"Ollama check: {e}")
+    _preflight = check_ollama()
+    if _preflight.status == "ok":
+        st.success(_preflight.message)
+    else:
+        _msg = _preflight.message + " Deterministic fallback will be used."
+        if _preflight.fix:
+            _msg += f" Fix: `{_preflight.fix}`"
+        st.warning(_msg)
     st.markdown("---")
     if st.button("End session & wipe data", use_container_width=True):
         sid = st.session_state.get("session_id")

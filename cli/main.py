@@ -24,8 +24,7 @@ from core.analyzers.profile_synthesizer import synthesize, chat
 from core.analyzers.entity_resolver import dedupe_findings
 from core.memory.session_store import SessionStore, sweep_stale_sessions
 from core.utils.keypress import press_any_key, prompt_single_key
-from core.llm.ollama_client import get_llm, OllamaUnavailable
-from config.settings import settings
+from core.llm.preflight import check_ollama
 
 
 console = Console()
@@ -121,21 +120,14 @@ def interactive() -> None:
 
 
 def _ollama_status(c: Console) -> None:
-    try:
-        llm = get_llm()
-        ok = llm.health_check()
-        if ok:
-            c.print(f"{INDICATORS['ok']} Ollama reachable at [#a8b5ff]{settings.OLLAMA_HOST}[/] · model [#a8b5ff]{settings.OLLAMA_MODEL}[/]")
-            try:
-                llm.ensure_model()
-            except Exception as e:
-                c.print(f"{INDICATORS['warn']} Could not verify model: {e}")
-        else:
-            c.print(f"{INDICATORS['warn']} Ollama not reachable — briefing will use deterministic fallback. Start daemon: [#a8b5ff]ollama serve &[/]")
-    except OllamaUnavailable:
-        c.print(f"{INDICATORS['warn']} `ollama` python package missing; deterministic fallback only.")
-    except Exception as e:
-        c.print(f"{INDICATORS['warn']} Ollama check error: {e}")
+    res = check_ollama()
+    if res.status == "ok":
+        c.print(f"{INDICATORS['ok']} {res.message}")
+        return
+    line = f"{INDICATORS['warn']} {res.message} Deterministic fallback will be used."
+    if res.fix:
+        line += f" Fix: [#a8b5ff]{res.fix}[/]"
+    c.print(line)
 
 
 def _run(target: Target) -> Briefing:
