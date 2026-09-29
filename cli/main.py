@@ -36,6 +36,17 @@ sweep_stale_sessions()
 
 _UI = {"plain": False, "fast": False}
 
+IDENTIFIER_FIELDS = [
+    ("email", "Email"),
+    ("phone", "Phone (E.164 preferred)"),
+    ("name", "Full name"),
+    ("username", "Username / handle"),
+    ("domain", "Domain"),
+    ("company", "Company"),
+    ("location", "Location hint"),
+]
+_SKIP_WORDS = {"nil", "none", "skip", "-", "n/a", "na"}
+
 
 @click.group()
 @click.option("--plain", is_flag=True, help="No color, no box-drawing — for piped output or no-color terminals.")
@@ -78,10 +89,15 @@ def investigate(email, phone, name, username, domain, company, location, image_p
 
         ids = dict(initial_ids) if first_case else {}
         if not ids:
-            console.print(f"{INDICATORS['info']} What can you tell Watson about the subject?")
-            kind = Prompt.ask("Identifier type", choices=["email", "phone", "name", "username", "domain", "company"], default="email")
-            val = Prompt.ask(f"Enter {kind}")
-            ids[kind] = val
+            console.print(f"{INDICATORS['info']} What can you tell Watson about the subject? "
+                          f"(enter what you have, leave blank or type 'nil' to skip any)")
+            for key, label in IDENTIFIER_FIELDS:
+                val = Prompt.ask(label, default="")
+                if val and val.strip().lower() not in _SKIP_WORDS:
+                    ids[key] = val.strip()
+            if not ids:
+                console.print(f"{INDICATORS['warn']} No identifiers provided — need at least one to investigate.")
+                continue
 
         target = Target(**ids)
         session_id = sessions.new_session(target)

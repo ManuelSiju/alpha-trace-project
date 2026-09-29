@@ -11,6 +11,12 @@ def _fake_run(target):
     return Briefing.empty(target=target.primary_identifier())
 
 
+def _only_name(name: str) -> str:
+    """Piped input for the interactive identifier capture (email, phone, name,
+    username, domain, company, location, in that order) with only `name` set."""
+    return f"\n\n{name}\n\n\n\n\n"
+
+
 def test_interactive_new_case_then_quit_purges_both(monkeypatch):
     """[N] opens a fresh case, [Q] closes it, and both purge — only Q announces it."""
     seen_targets: list[str] = []
@@ -24,7 +30,7 @@ def test_interactive_new_case_then_quit_purges_both(monkeypatch):
 
     runner = CliRunner()
     # "x" = the splash keypress; then case 1 (name/Alice), /done, N, case 2 (name/Bob), /done, Q
-    piped_input = "x\nname\nAlice\n/done\nn\nname\nBob\n/done\nq\n"
+    piped_input = "x\n" + _only_name("Alice") + "/done\nn\n" + _only_name("Bob") + "/done\nq\n"
     result = runner.invoke(cli_main.cli, ["interactive"], input=piped_input)
 
     assert result.exit_code == 0, result.output
@@ -46,6 +52,35 @@ def test_investigate_no_chat_purges_without_menu(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "Open a new case" not in result.output
     assert cli_main.sessions.list_sessions() == []
+
+
+def test_interactive_capture_collects_multiple_identifiers_and_skips_blanks(monkeypatch):
+    """Each field is asked one at a time; blank/'nil' skips it; everything
+    provided ends up on one Target together, not just the first field entered."""
+    seen: list = []
+
+    def fake_run(target):
+        seen.append(target)
+        return _fake_run(target)
+
+    monkeypatch.setattr(cli_main, "_run", fake_run)
+    monkeypatch.setattr(cli_main, "_ollama_status", lambda c: None)
+
+    runner = CliRunner()
+    # order: email, phone, name, username, domain, company, location
+    piped_input = "x\nalice@example.com\nnil\nAlice Example\nalice_x\n\n\nWonderland\n/done\nq\n"
+    result = runner.invoke(cli_main.cli, ["--fast", "interactive"], input=piped_input)
+
+    assert result.exit_code == 0, result.output
+    assert len(seen) == 1
+    target = seen[0]
+    assert target.email == "alice@example.com"
+    assert target.phone is None  # "nil" skipped
+    assert target.name == "Alice Example"
+    assert target.username == "alice_x"
+    assert target.domain is None  # blank skipped
+    assert target.company is None  # blank skipped
+    assert target.location == "Wonderland"
 
 
 def test_plain_flag_produces_no_ansi_color(monkeypatch):
@@ -119,7 +154,7 @@ def test_export_command_in_chat_writes_real_file(monkeypatch, tmp_path):
 
     export_path = tmp_path / "out.md"
     runner = CliRunner()
-    piped_input = f"x\nname\nIvy\n/export\n{export_path}\n/done\nq\n"
+    piped_input = "x\n" + _only_name("Ivy") + f"/export\n{export_path}\n/done\nq\n"
     result = runner.invoke(cli_main.cli, ["--fast", "interactive"], input=piped_input)
 
     assert result.exit_code == 0, result.output
@@ -134,7 +169,7 @@ def test_consulting_room_and_221b_prompt_appear_in_chat(monkeypatch):
     monkeypatch.setattr(cli_main, "chat", lambda briefing, q, history: "an answer")
 
     runner = CliRunner()
-    piped_input = "x\nname\nHal\n/done\nq\n"
+    piped_input = "x\n" + _only_name("Hal") + "/done\nq\n"
     result = runner.invoke(cli_main.cli, ["--fast", "interactive"], input=piped_input)
 
     assert result.exit_code == 0, result.output
