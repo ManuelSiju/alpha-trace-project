@@ -33,22 +33,34 @@ def test_build_queries_uses_every_identifier_provided():
     assert '"Jamie Carter" "Example Corp"' in queries
     assert '"Jamie Carter" "Metropolis"' in queries
     assert '"Jamie Carter" site:linkedin.com' in queries
+    # portfolio / personal-site discovery
+    assert any("portfolio" in q for q in queries)
     assert len(queries) <= WebAgent.MAX_QUERIES
+
+
+def test_build_queries_derives_slug_from_email_local_part():
+    agent = WebAgent()
+    queries = agent._build_queries(Target(email="manuelsiju03@gmail.com"))
+    # email local-part gets its own bare query even without a username field
+    assert '"manuelsiju03"' in queries
+    # and feeds portfolio-host discovery
+    assert any("manuelsiju03" in q and "github.io" in q for q in queries)
 
 
 def test_build_queries_skips_absent_fields():
     agent = WebAgent()
     queries = agent._build_queries(Target(username="soloqueryuser"))
-    assert queries == ['"soloqueryuser"']
+    # username -> its own bare query + a portfolio-host discovery query
+    assert '"soloqueryuser"' in queries
+    assert any("portfolio" in q for q in queries)
 
 
 def test_search_success_returns_finding():
     agent = WebAgent()
     agent._search_with_retry = lambda q: [{"title": "Hit", "href": "https://example.com"}]
     findings = asyncio.run(agent.gather(_target()))
-    # name -> its own query + a site:linkedin.com dork (queries the search
-    # engine's index, never linkedin.com itself)
-    assert len(findings) == 2
+    # name -> bare query + site:linkedin.com dork + portfolio discovery query
+    assert len(findings) == len(agent._build_queries(_target()))
     assert all("web result" in f.title for f in findings)
     assert all(f.confidence == 55 for f in findings)
 
@@ -86,29 +98,33 @@ def test_cache_hit_skips_real_search(tmp_path):
         return [{"title": "Hit", "href": "https://example.com"}]
 
     agent._search_with_retry = _search
+    n_queries = len(agent._build_queries(_target()))
     asyncio.run(agent.gather(_target()))
-    assert call_count["n"] == 2  # name query + linkedin dork, first run: both real searches
+    assert call_count["n"] == n_queries  # first run: every query is a real search
 
     asyncio.run(agent.gather(_target()))
-    assert call_count["n"] == 2  # second run: both served from cache, no new searches
+    assert call_count["n"] == n_queries  # second run: all served from cache, no new searches
 
 
 def test_retry_recovers_from_transient_failure():
-    # A single-query target (email only -- no name, so no linkedin dork added)
-    # keeps this deterministic: concurrent queries would share the mutable
-    # `attempts` counter and race.
+    # username-only target produces exactly one bare query plus one portfolio
+    # query; force a single query via a lone email domain would still be 2, so
+    # assert on the ceiling of one flaky query's retries rather than a hard
+    # count to stay robust to the query set.
     agent = WebAgent()
-    target = Target(email="jamie@example.com")
-    attempts = {"n": 0}
+    target = Target(username="soloqueryuser")
+    queries = agent._build_queries(target)
+    per_query_attempts: dict[str, int] = {}
 
     def _flaky(q):
-        attempts["n"] += 1
-        if attempts["n"] < 2:
+        per_query_attempts[q] = per_query_attempts.get(q, 0) + 1
+        if per_query_attempts[q] < 2:
             raise RuntimeError("transient")
         return [{"title": "Hit", "href": "https://example.com"}]
 
     agent._search = _flaky
     findings = asyncio.run(agent.gather(target))
-    assert attempts["n"] == 2
-    assert len(findings) == 1
-    assert findings[0].title != "Web search unavailable"
+    # each query retried once then succeeded (tenacity: 2 attempts)
+    assert all(v == 2 for v in per_query_attempts.values())
+    assert len(findings) == len(queries)
+    assert all(f.title != "Web search unavailable" for f in findings)

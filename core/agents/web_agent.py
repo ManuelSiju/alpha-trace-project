@@ -17,7 +17,7 @@ class WebAgent(BaseAgent):
     category = "Web Presence"
 
     MAX_RESULTS = 12
-    MAX_QUERIES = 8
+    MAX_QUERIES = 12
     SEARCH_TIMEOUT = 20  # seconds; shared budget per query (ddgs "auto" backend already
                           # fans out across multiple search engines within one call)
 
@@ -70,6 +70,12 @@ class WebAgent(BaseAgent):
         queries: List[str] = []
         if target.email:
             queries.append(f'"{target.email}"')
+            # Email local-part often equals a handle/portfolio slug even when
+            # the username field wasn't given (e.g. manuelsiju03@ -> a site
+            # titled/hosted under "manuelsiju03").
+            local = target.email.split("@", 1)[0]
+            if local and local != (target.username or ""):
+                queries.append(f'"{local}"')
         if target.name:
             queries.append(f'"{target.name}"')
         if target.username:
@@ -84,6 +90,15 @@ class WebAgent(BaseAgent):
             queries.append(f'"{target.name}" "{target.location}"')
         if target.name:
             queries.append(f'"{target.name}" site:linkedin.com')
+        # Portfolio / personal-site discovery: pair the strongest name-ish
+        # token with intent keywords so a self-hosted portfolio (a very common
+        # thing for the people this tool is pointed at) actually surfaces
+        # instead of only their social profiles.
+        slug = target.username or (target.email.split("@", 1)[0] if target.email else None)
+        if target.name:
+            queries.append(f'"{target.name}" (portfolio OR resume OR CV OR "personal website")')
+        if slug:
+            queries.append(f'{slug} (portfolio OR github.io OR vercel.app OR netlify.app)')
         return queries[: self.MAX_QUERIES]
 
     async def _run_one_query(self, q: str) -> tuple[str, Optional[list[dict]]]:
