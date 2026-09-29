@@ -35,7 +35,7 @@ class SocialMediaAgent(BaseAgent):
                     content=f"{plat}: {hit['url']} (HTTP {hit['status']})",
                     url=hit["url"],
                     confidence=hit["confidence"],
-                    data=hit,
+                    data={**hit, "handle": primary},
                 ))
 
         # Instagram via instaloader (lazy)
@@ -60,6 +60,10 @@ class SocialMediaAgent(BaseAgent):
             "tiktok": f"https://www.tiktok.com/@{handle}",
             "medium": f"https://medium.com/@{handle}",
             "dev.to": f"https://dev.to/{handle}",
+            "telegram": f"https://t.me/{handle}",
+            "bluesky": f"https://bsky.app/profile/{handle}.bsky.social",
+            "pinterest": f"https://www.pinterest.com/{handle}/",
+            "keybase": f"https://keybase.io/{handle}",
         }
         out: Dict[str, Dict[str, Any]] = {}
         async with httpx.AsyncClient(timeout=10, headers=default_headers(), follow_redirects=True) as c:
@@ -77,7 +81,7 @@ class SocialMediaAgent(BaseAgent):
             exists = status == 200 and len(r.text) > 1000
             confidence = 60 if exists else 20
             # Heuristic: pages that return 200 with login wall: lower confidence
-            if exists and "login" in r.text.lower()[:5000] and plat in ("instagram", "facebook"):
+            if exists and "login" in r.text.lower()[:5000] and plat in ("instagram", "facebook", "linkedin", "threads"):
                 confidence = 45
             return {"platform": plat, "url": url, "status": status, "exists": exists, "confidence": confidence}
         except Exception as e:

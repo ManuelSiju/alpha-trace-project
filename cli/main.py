@@ -25,6 +25,7 @@ from core.models.schema import Target, Briefing, Finding
 from core.agents.orchestrator import Orchestrator, build_default_agents
 from core.analyzers.profile_synthesizer import synthesize, chat, top_k_evidence
 from core.analyzers.timeline_builder import build_timeline
+from core.analyzers.entity_resolver import canonical_handles
 from core.memory.session_store import SessionStore, sweep_stale_sessions
 from core.utils.keypress import prompt_single_key, read_key
 from core.llm.preflight import check_ollama
@@ -213,6 +214,14 @@ def _connections_summary(b: Briefing) -> str:
         lines.append(f"{len(urls)} linked URL(s) connect the subject to external profiles and pages.")
     else:
         lines.append("No external URLs were linked to the subject.")
+
+    handles = canonical_handles(b.raw_findings)
+    for handle, handle_urls in handles.items():
+        if len(handle_urls) > 1:
+            # "probable", not "confirmed": these are HTTP-200 existence probes,
+            # not verified account ownership -- matches the same honesty rule
+            # the synthesizer applies to individual findings.
+            lines.append(f"'{handle}' probable across {len(handle_urls)} platforms (unverified): " + ", ".join(handle_urls))
     return "\n".join(lines)
 
 

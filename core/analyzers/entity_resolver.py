@@ -21,11 +21,14 @@ def dedupe_findings(findings: List[Finding]) -> List[Finding]:
 
 
 def canonical_handles(findings: List[Finding]) -> Dict[str, List[str]]:
-    """Group platform URLs by detected handle."""
+    """Group platform URLs by detected handle, so the same username/login
+    showing up across independent sources (social probes, GitHub, sherlock
+    hits) surfaces as one cross-platform identity instead of scattered,
+    seemingly-unrelated findings."""
     by_handle: Dict[str, List[str]] = defaultdict(list)
     for f in findings:
         data = f.data or {}
-        h = data.get("handle") or data.get("username")
+        h = data.get("handle") or data.get("username") or data.get("login")
         if h and f.url:
             by_handle[h].append(f.url)
     return dict(by_handle)

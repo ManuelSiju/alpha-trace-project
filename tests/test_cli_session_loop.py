@@ -4,7 +4,7 @@ import json
 from click.testing import CliRunner
 
 import cli.main as cli_main
-from core.models.schema import Briefing, BriefingCategory
+from core.models.schema import Briefing, BriefingCategory, Finding
 
 
 def _fake_run(target):
@@ -120,6 +120,21 @@ def test_detective_vocabulary_present_in_briefing_output(monkeypatch):
         "CONNECTIONS", "GAPS IN THE RECORD", "Case File No. 221-B-",
     ):
         assert phrase in result.output, phrase
+
+
+def test_connections_summary_surfaces_cross_platform_handle():
+    b = Briefing(
+        target="t",
+        raw_findings=[
+            Finding(category="Social Media", source="probe:instagram", title="x", content="",
+                    url="https://instagram.com/jcarter", data={"handle": "jcarter"}),
+            Finding(category="Username Footprint", source="sherlock:jcarter", title="x", content="",
+                    url="https://github.com/jcarter", data={"handle": "jcarter"}),
+        ],
+    )
+    summary = cli_main._connections_summary(b)
+    assert "jcarter" in summary
+    assert "2 platforms" in summary
 
 
 def _sample_briefing() -> Briefing:

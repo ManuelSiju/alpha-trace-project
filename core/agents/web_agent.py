@@ -17,6 +17,7 @@ class WebAgent(BaseAgent):
     category = "Web Presence"
 
     MAX_RESULTS = 12
+    MAX_QUERIES = 8
     SEARCH_TIMEOUT = 20  # seconds; shared budget per query (ddgs "auto" backend already
                           # fans out across multiple search engines within one call)
 
@@ -30,33 +31,18 @@ class WebAgent(BaseAgent):
                 logger.warning("ddgs (or duckduckgo-search) not installed")
                 return [self._unavailable("the ddgs search library is not installed")]
 
-        queries: List[str] = []
-        if target.email:
-            queries.append(f'"{target.email}"')
-        if target.name:
-            queries.append(f'"{target.name}"')
-        if target.username:
-            queries.append(f'"{target.username}"')
+        queries = self._build_queries(target)
         if not queries:
             return []
 
+        # Run the whole query set concurrently -- more coverage without more
+        # wall-clock time, since ddgs "auto" already fans out per-query and
+        # each query gets its own timeout/retry/cache independently.
+        results_by_query = await asyncio.gather(*[self._run_one_query(q) for q in queries])
+
         findings: List[Finding] = []
-        loop = asyncio.get_running_loop()
         any_result = False
-
-        for q in queries[:3]:
-            results = self._cache_get(q)
-            if results is None:
-                try:
-                    results = await asyncio.wait_for(
-                        loop.run_in_executor(None, self._search_with_retry, q),
-                        timeout=self.SEARCH_TIMEOUT,
-                    )
-                    self._cache_put(q, results)
-                except Exception as e:
-                    logger.debug(f"web search failed for {redact(q)}: {e}")
-                    continue
-
+        for q, results in results_by_query:
             if not results:
                 continue
             any_result = True
@@ -73,6 +59,47 @@ class WebAgent(BaseAgent):
         if not any_result:
             findings.append(self._unavailable("no search engine returned results (all backends failed, timed out, or returned nothing)"))
         return findings
+
+    def _build_queries(self, target: Target) -> List[str]:
+        """Every identifier given gets its own query, plus a couple of
+        combined/targeted ones for disambiguation and platform discovery.
+        The `site:linkedin.com` query asks the search engine what it has
+        already indexed -- it never contacts linkedin.com itself, so it
+        doesn't carry the direct-scraping ToS risk that excludes LinkedIn
+        from the HTTP existence-probe list."""
+        queries: List[str] = []
+        if target.email:
+            queries.append(f'"{target.email}"')
+        if target.name:
+            queries.append(f'"{target.name}"')
+        if target.username:
+            queries.append(f'"{target.username}"')
+        if target.phone:
+            queries.append(f'"{target.phone}"')
+        if target.domain:
+            queries.append(f'"{target.domain}"')
+        if target.name and target.company:
+            queries.append(f'"{target.name}" "{target.company}"')
+        if target.name and target.location:
+            queries.append(f'"{target.name}" "{target.location}"')
+        if target.name:
+            queries.append(f'"{target.name}" site:linkedin.com')
+        return queries[: self.MAX_QUERIES]
+
+    async def _run_one_query(self, q: str) -> tuple[str, Optional[list[dict]]]:
+        results = self._cache_get(q)
+        if results is None:
+            loop = asyncio.get_running_loop()
+            try:
+                results = await asyncio.wait_for(
+                    loop.run_in_executor(None, self._search_with_retry, q),
+                    timeout=self.SEARCH_TIMEOUT,
+                )
+                self._cache_put(q, results)
+            except Exception as e:
+                logger.debug(f"web search failed for {redact(q)}: {e}")
+                results = None
+        return q, results
 
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=4), reraise=True)
     def _search_with_retry(self, query: str) -> list[dict]:

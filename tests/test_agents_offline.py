@@ -183,6 +183,27 @@ def test_social_media_agent_no_candidates_returns_empty():
     assert asyncio.run(SocialMediaAgent().gather(Target())) == []
 
 
+def test_social_media_probe_finding_carries_handle_for_correlation(monkeypatch):
+    """canonical_handles() (entity_resolver) groups findings by data['handle'] --
+    probe findings must carry it for cross-platform correlation to work."""
+    agent = SocialMediaAgent()
+
+    async def fake_probe(handle):
+        return {"instagram": {"platform": "instagram", "url": "https://instagram.com/x",
+                               "status": 200, "exists": True, "confidence": 60}}
+
+    async def fake_none(handle):
+        return None
+
+    monkeypatch.setattr(agent, "_probe_existence", fake_probe)
+    monkeypatch.setattr(agent, "_instagram", fake_none)
+    monkeypatch.setattr(agent, "_reddit", fake_none)
+
+    findings = asyncio.run(agent.gather(Target(username="targethandle")))
+    assert len(findings) == 1
+    assert findings[0].data["handle"] == "targethandle"
+
+
 def test_social_media_head_probe_network_failure_handled():
     class FakeClient:
         async def get(self, url):

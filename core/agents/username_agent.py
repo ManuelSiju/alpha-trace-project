@@ -33,10 +33,14 @@ class UsernameAgent(BaseAgent):
             logger.warning("sherlock not installed; skip username sweep")
             return []
 
-        # Limit to first 3 candidates to keep runtime sane
+        # Limit to first 3 candidates to keep runtime sane. Run them
+        # concurrently -- sequential sherlock sweeps at SHERLOCK_TIMEOUT each
+        # could otherwise take up to 3x as long for no benefit, since each
+        # sweep is an independent subprocess.
+        results = await asyncio.gather(*[self._run_one(bin_path, h) for h in candidates[:3]])
         findings: List[Finding] = []
-        for handle in candidates[:3]:
-            findings.extend(await self._run_one(bin_path, handle))
+        for r in results:
+            findings.extend(r)
         return findings
 
     async def _run_one(self, bin_path: str, handle: str) -> List[Finding]:
