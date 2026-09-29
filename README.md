@@ -38,8 +38,10 @@ That's it — `./alpha` / `alpha.bat` provisions everything itself:
 - Runs a one-time `playwright install chromium`. No agent in the current codebase actually
   does browser-based scraping yet — this step exists for a possible future browser-based
   agent — so a failure here is just a warning, never a blocker.
-- Checks whether `ollama` is on PATH and prints the install command for your OS if it
-  isn't — it never installs Ollama for you.
+- Installs Ollama if it isn't on PATH, starts the daemon if it isn't already running, and
+  pulls the model (`qwen2.5:3b-instruct` by default, ~2-4 GB) if it isn't already pulled —
+  all automatic, no separate step. If any of that fails, it says so and continues anyway
+  with a deterministic, non-LLM fallback rather than blocking the app from starting.
 - Launches the app: a splash screen, then "Press any key to open a new case."
 
 From there: pick an identifier type, enter a value, watch the Evidence Board as each
@@ -50,13 +52,17 @@ once the purge is verified.
 
 ### Ollama (for LLM-backed deductions)
 
+`./alpha` / `alpha.bat` / `make run` handle this for you — install, start, and pull the
+model happen automatically on first run. To do it by hand instead (e.g. to pick a
+different model):
+
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh   # Linux; see ollama.com/download for macOS/Windows
 ollama serve &
 ollama pull qwen2.5:3b-instruct                 # ~2 GB, fits in 8 GB RAM
 ```
 
-Without Ollama running, Alpha-Tracer still works — briefings fall back to a deterministic,
+If the automatic install/start/pull fails for any reason, Alpha-Tracer still works — briefings fall back to a deterministic,
 non-LLM summary, and the Consulting Room's chat and `/timeline` will say so plainly instead
 of pretending to have an answer.
 
@@ -130,9 +136,12 @@ path you explicitly provide, on explicit request.
 
 - **"uv was installed but isn't on PATH"** — open a new terminal (so it picks up the
   updated PATH from the installer) and re-run `./alpha` / `alpha.bat`.
-- **"Ollama server is not reachable"** — this is a warning, not a failure; the app
-  continues with a deterministic fallback briefing. Run the fix command it prints
-  (`ollama serve &` on Linux/macOS; open the Ollama app on Windows).
+- **"Ollama server is not reachable"** — the launcher tries to install/start/pull it
+  automatically on every run; if you still see this it means that failed silently in the
+  background (check `/tmp/alpha-tracer-ollama.log` on Linux/macOS) or you launched via
+  `python main.py` directly instead of `./alpha`/`alpha.bat`/`make run`. It's a warning, not
+  a failure — the app continues with a deterministic fallback briefing either way. Manual
+  fix: `ollama serve &` (Linux/macOS) or open the Ollama app (Windows).
 - **`sherlock error ...: No such file or directory`** — usually means `.venv`'s installed
   console scripts point at a stale interpreter path (e.g. the project directory was moved
   or renamed after the first `pip install`). Recreate the environment:

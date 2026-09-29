@@ -47,12 +47,34 @@ if not exist ".venv\.playwright_installed" (
 
 where ollama >nul 2>nul
 if errorlevel 1 (
-    echo.
-    echo Note: 'ollama' was not found on PATH. Alpha-Tracer will still run using a
-    echo deterministic fallback briefing, but for LLM-powered analysis, install it:
-    echo   winget install Ollama.Ollama
-    echo   ^(or download from https://ollama.com/download^)
-    echo.
+    echo Ollama not found — installing it...
+    winget install --id Ollama.Ollama -e --silent --accept-package-agreements --accept-source-agreements
+    set "PATH=%LOCALAPPDATA%\Programs\Ollama;%PATH%"
+)
+
+where ollama >nul 2>nul
+if not errorlevel 1 (
+    curl -fsS -o nul --max-time 2 http://localhost:11434/api/tags >nul 2>nul
+    if errorlevel 1 (
+        echo Starting Ollama daemon...
+        start /B "" ollama serve >nul 2>nul
+        for /L %%i in (1,1,30) do (
+            curl -fsS -o nul --max-time 1 http://localhost:11434/api/tags >nul 2>nul
+            if not errorlevel 1 goto :ollama_up
+            timeout /t 1 /nobreak >nul
+        )
+        :ollama_up
+    )
+
+    for /f "usebackq delims=" %%m in (`".venv\Scripts\python.exe" -c "from config.settings import settings; print(settings.OLLAMA_MODEL)" 2^>nul`) do set "MODEL=%%m"
+    if not defined MODEL set "MODEL=qwen2.5:3b-instruct"
+    ollama list | findstr /C:"%MODEL%" >nul
+    if errorlevel 1 (
+        echo Pulling model %MODEL% ^(first run, a few GB^)...
+        ollama pull "%MODEL%"
+    )
+) else (
+    echo Ollama still not available — Alpha-Tracer will run with a deterministic fallback briefing.
 )
 
 ".venv\Scripts\python.exe" main.py %*

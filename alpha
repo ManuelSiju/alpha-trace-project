@@ -51,15 +51,44 @@ if [ ! -f "$MARKER" ]; then
 fi
 
 if ! command -v ollama >/dev/null 2>&1; then
-    echo
-    echo "Note: 'ollama' was not found on PATH. Alpha-Tracer will still run using a"
-    echo "deterministic fallback briefing, but for LLM-powered analysis, install it:"
+    echo "Ollama not found — installing it..."
     case "$(uname -s)" in
-        Darwin) echo "  brew install ollama   (or: curl -fsSL https://ollama.com/install.sh | sh)" ;;
-        Linux)  echo "  curl -fsSL https://ollama.com/install.sh | sh" ;;
-        *)      echo "  see https://ollama.com/download" ;;
+        Darwin)
+            if command -v brew >/dev/null 2>&1; then
+                brew install ollama
+            else
+                curl -fsSL https://ollama.com/install.sh | sh
+            fi
+            ;;
+        Linux)
+            curl -fsSL https://ollama.com/install.sh | sh
+            ;;
+        *)
+            echo "Don't know how to auto-install Ollama on this OS."
+            echo "Install it manually: https://ollama.com/download"
+            ;;
     esac
-    echo
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
+if command -v ollama >/dev/null 2>&1; then
+    if ! curl -fsS -o /dev/null --max-time 2 http://localhost:11434/api/tags 2>/dev/null; then
+        echo "Starting Ollama daemon..."
+        nohup ollama serve >/tmp/alpha-tracer-ollama.log 2>&1 &
+        disown
+        for _ in $(seq 1 30); do
+            curl -fsS -o /dev/null --max-time 1 http://localhost:11434/api/tags 2>/dev/null && break
+            sleep 1
+        done
+    fi
+
+    MODEL="$(.venv/bin/python -c 'from config.settings import settings; print(settings.OLLAMA_MODEL)' 2>/dev/null || echo qwen2.5:3b-instruct)"
+    if command -v ollama >/dev/null 2>&1 && ! ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$MODEL"; then
+        echo "Pulling model $MODEL (first run, a few GB)..."
+        ollama pull "$MODEL" || echo "Warning: model pull failed; Alpha-Tracer will fall back to a deterministic briefing until it succeeds."
+    fi
+else
+    echo "Ollama still not available — Alpha-Tracer will run with a deterministic fallback briefing."
 fi
 
 exec .venv/bin/python main.py "$@"
