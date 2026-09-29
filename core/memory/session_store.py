@@ -168,3 +168,19 @@ class SessionStore:
     def _cache_path(self, key: str) -> Path:
         h = hashlib.sha256(key.encode("utf-8")).hexdigest()
         return self._session_dir / "cache" / h
+
+    # -- plain temp files for callers that need a real path on disk -----
+
+    def temp_file_path(self, filename: str) -> Optional[Path]:
+        """A path inside the session's managed temp dir, for callers that need
+        to hand a real file to something that reads paths directly (e.g. PIL
+        for EXIF on an uploaded image) rather than opaque bytes. Not encrypted
+        — the caller needs to read it as a normal file — but it lives inside
+        the same directory `purge_session`/crash-sweep delete, so its lifetime
+        is still bounded to the session's. Returns None with no active session.
+        """
+        if not self._session_dir:
+            return None
+        d = self._session_dir / "uploads"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / filename

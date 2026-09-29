@@ -5,7 +5,7 @@ from core.models.schema import Briefing
 from core.analyzers.profile_synthesizer import chat
 
 
-def render(b: Briefing, session_state_key: str = "chat_history") -> None:
+def render(b: Briefing, sessions=None, session_id: str | None = None, session_state_key: str = "chat_history") -> None:
     st.markdown("### Interactive Q&A")
     if session_state_key not in st.session_state:
         st.session_state[session_state_key] = []
@@ -25,3 +25,5 @@ def render(b: Briefing, session_state_key: str = "chat_history") -> None:
         with st.chat_message("assistant"):
             st.write(a)
         st.session_state[session_state_key].append({"question": q, "answer": a})
+        if sessions is not None and session_id:
+            sessions.append_chat(session_id, q, a)

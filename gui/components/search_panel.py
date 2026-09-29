@@ -4,7 +4,15 @@ import streamlit as st
 from core.models.schema import Target
 
 
-def render() -> Target | None:
+def render() -> tuple[Target, bytes | None, str | None] | None:
+    """Returns (target, uploaded_image_bytes, uploaded_image_filename) or None.
+
+    The image is returned as raw bytes rather than written to disk here: no
+    session exists yet at this point (new_session() hasn't run), and writing
+    to a fixed global temp path would leave a plaintext, never-cleaned-up
+    file outside the session store's purge lifecycle. The caller writes it
+    (if present) via SessionStore.temp_file_path() once a session exists.
+    """
     with st.form("target_form", clear_on_submit=False):
         st.subheader("Target")
         c1, c2 = st.columns(2)
@@ -29,13 +37,10 @@ def render() -> Target | None:
                 "location": location or None,
             }
             kw = {k: v for k, v in kw.items() if v}
-            if image:
-                tmp = f"/tmp/{image.name}"
-                with open(tmp, "wb") as f:
-                    f.write(image.getbuffer())
-                kw["image_path"] = tmp
-            if not kw:
+            if not kw and not image:
                 st.warning("Provide at least one identifier.")
                 return None
-            return Target(**kw)
+            image_bytes = image.getvalue() if image else None
+            image_name = image.name if image else None
+            return Target(**kw), image_bytes, image_name
     return None

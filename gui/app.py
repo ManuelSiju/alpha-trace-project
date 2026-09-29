@@ -52,6 +52,23 @@ with hc2:
         unsafe_allow_html=True,
     )
 
+def _purge_and_reset(announce: bool = False) -> None:
+    """Same purge path used by both the sidebar's close button and starting a
+    new case: drop the SessionStore record, wipe its encrypted cache dir, and
+    clear the Streamlit-side state that mirrors it. Mirrors the CLI's
+    [N]/[Q] menu, which both purge but only [Q] announces it."""
+    sid = st.session_state.get("session_id")
+    if sid:
+        res = sessions.purge_session(sid, wipe_cache=True)
+        if announce:
+            st.success(f"Case closed. Session data destroyed. (cache files wiped: {res['cache_files_removed']})")
+    st.session_state.briefing = None
+    st.session_state.target = None
+    st.session_state.session_id = None
+    if "chat_history" in st.session_state:
+        del st.session_state["chat_history"]
+
+
 with st.sidebar:
     if logo_path.exists():
         st.image(str(logo_path), width=140)
@@ -67,17 +84,13 @@ with st.sidebar:
             _msg += f" Fix: `{_preflight.fix}`"
         st.warning(_msg)
     st.markdown("---")
-    if st.button("End session & wipe data", use_container_width=True):
-        sid = st.session_state.get("session_id")
-        if sid:
-            res = sessions.purge_session(sid)
-            st.success(f"Case closed. Session data destroyed. (cache files wiped: {res['cache_files_removed']})")
-        st.session_state.briefing = None
-        st.session_state.target = None
-        st.session_state.session_id = None
-        if "chat_history" in st.session_state:
-            del st.session_state["chat_history"]
-        st.rerun()
+    if st.session_state.get("session_id"):
+        if st.button("Start a new case", use_container_width=True):
+            _purge_and_reset(announce=False)
+            st.rerun()
+        if st.button("Close the case file", use_container_width=True):
+            _purge_and_reset(announce=True)
+            st.rerun()
 
 
 if "briefing" not in st.session_state:
@@ -88,20 +101,38 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = None
 
 
-target = render_search()
-if target is not None:
-    sid = sessions.new_session(target)
-    st.session_state.target = target
-    st.session_state.session_id = sid
-    with st.spinner("Gathering intelligence across agents..."):
-        orch = Orchestrator(build_default_agents(), cache=sessions)
-        t0 = time.monotonic()
-        findings = asyncio.run(orch.run_all(target))
-        elapsed = time.monotonic() - t0
-    with st.spinner("Synthesizing briefing via local LLM..."):
-        briefing = synthesize(target, findings, elapsed=elapsed)
-    sessions.save_briefing(sid, briefing)
-    st.session_state.briefing = briefing
+if st.session_state.briefing is None:
+    result = render_search()
+    if result is not None:
+        target, image_bytes, image_name = result
+        # Safety net: if a case is somehow still open (shouldn't be reachable
+        # since the form only renders when briefing is None), purge it first
+        # rather than leaking an un-purged session.
+        prev_sid = st.session_state.get("session_id")
+        if prev_sid:
+            sessions.purge_session(prev_sid, wipe_cache=True)
+
+        sid = sessions.new_session(target)
+        if image_bytes and image_name:
+            img_path = sessions.temp_file_path(image_name)
+            if img_path:
+                img_path.write_bytes(image_bytes)
+                target.image_path = str(img_path)
+        st.session_state.target = target
+        st.session_state.session_id = sid
+        with st.spinner("Gathering intelligence across agents..."):
+            orch = Orchestrator(build_default_agents(), cache=sessions)
+            t0 = time.monotonic()
+            findings = asyncio.run(orch.run_all(target))
+            elapsed = time.monotonic() - t0
+        with st.spinner("Synthesizing briefing via local LLM..."):
+            briefing = synthesize(target, findings, elapsed=elapsed)
+        sessions.save_briefing(sid, briefing)
+        st.session_state.briefing = briefing
+        # Without this, the search form (checked against the now-stale value at
+        # the top of this same script pass) and the tabs below it would both
+        # render together in one confusing view instead of a clean handoff.
+        st.rerun()
 
 
 if st.session_state.briefing is not None:
@@ -110,7 +141,7 @@ if st.session_state.briefing is not None:
     with tabs[0]:
         render_briefing(b)
     with tabs[1]:
-        render_chat(b)
+        render_chat(b, sessions, st.session_state.session_id)
     with tabs[2]:
         render_graph(st.session_state.target, b)
     with tabs[3]:

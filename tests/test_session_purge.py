@@ -71,3 +71,23 @@ def test_cache_get_put_roundtrip_and_expiry(tmp_path: Path):
 
     store.cache_put("k2", b"stale", ttl=-1)
     assert store.cache_get("k2") is None
+
+
+def test_temp_file_path_none_without_active_session(tmp_path: Path):
+    store = SessionStore(base_dir=tmp_path)
+    assert store.temp_file_path("photo.jpg") is None
+
+
+def test_temp_file_path_writable_and_purged_with_session(tmp_path: Path):
+    store = SessionStore(base_dir=tmp_path)
+    sid = store.new_session(Target(name="t"))
+    p = store.temp_file_path("photo.jpg")
+    assert p is not None
+    p.write_bytes(b"fake image bytes")
+    assert p.exists()
+
+    res = store.purge_session(sid, wipe_cache=True)
+
+    assert res["cache_files_removed"] == 1
+    assert not p.exists()
+    assert not p.parent.exists()  # the uploads/ dir itself is gone too
