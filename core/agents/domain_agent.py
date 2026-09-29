@@ -22,10 +22,15 @@ class DomainAgent(BaseAgent):
             dom = target.email.split("@", 1)[1]
         if not dom or not is_domain(dom):
             return []
-        # Skip mass-mailbox providers — domain whois is noise then
+        # Mass-mailbox providers (gmail.com etc.) carry zero personal signal in
+        # their own WHOIS/DNS/subdomain data — it's always the provider's
+        # generic infrastructure, never the target's. EmailAgent already
+        # reports the provider itself; skip this agent entirely rather than
+        # burn a request cycle and dilute the LLM's context with Google's DNS.
         mailbox_only = {"gmail.com", "googlemail.com", "yahoo.com", "outlook.com",
                         "hotmail.com", "icloud.com", "protonmail.com", "proton.me"}
-        is_mailbox = dom.lower() in mailbox_only
+        if dom.lower() in mailbox_only:
+            return []
 
         findings: List[Finding] = []
         loop = asyncio.get_running_loop()
@@ -37,10 +42,9 @@ class DomainAgent(BaseAgent):
         dns_data = await loop.run_in_executor(None, self._dns, dom)
         findings.extend(dns_data)
 
-        if not is_mailbox:
-            sub = await self._crtsh(dom)
-            if sub:
-                findings.append(sub)
+        sub = await self._crtsh(dom)
+        if sub:
+            findings.append(sub)
 
         return findings
 

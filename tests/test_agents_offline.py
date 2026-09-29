@@ -104,19 +104,22 @@ def test_domain_agent_crtsh_failure_returns_none(monkeypatch):
     assert result is None
 
 
-def test_domain_agent_mailbox_domain_skips_crtsh(monkeypatch):
+def test_domain_agent_mailbox_domain_skips_everything(monkeypatch):
+    """Gmail/Yahoo/etc DNS/WHOIS is the provider's infra, never the target's —
+    should return no findings at all, not just skip crt.sh."""
     agent = DomainAgent()
-    monkeypatch.setattr(agent, "_whois", lambda d: None)
-    monkeypatch.setattr(agent, "_dns", lambda d: [])
-    called = {"crtsh": False}
+    called = {"whois": False, "dns": False, "crtsh": False}
+    monkeypatch.setattr(agent, "_whois", lambda d: called.__setitem__("whois", True))
+    monkeypatch.setattr(agent, "_dns", lambda d: called.__setitem__("dns", True) or [])
 
     async def fake_crtsh(d):
         called["crtsh"] = True
         return None
 
     monkeypatch.setattr(agent, "_crtsh", fake_crtsh)
-    asyncio.run(agent.gather(Target(email="x@gmail.com")))
-    assert called["crtsh"] is False
+    findings = asyncio.run(agent.gather(Target(email="x@gmail.com")))
+    assert findings == []
+    assert called == {"whois": False, "dns": False, "crtsh": False}
 
 
 # ------------------------------------------------------------------ BreachAgent
