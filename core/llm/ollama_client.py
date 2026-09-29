@@ -115,8 +115,17 @@ class OllamaClient:
             raise
 
     def analyze_briefing(self, target_label: str, findings_payload: List[Dict[str, Any]]) -> Dict[str, Any]:
+        region_note = ""
+        if settings.REGION_FOCUS.upper() == "IN":
+            region_note = (
+                "Regional context: the subject is likely in India. Interpret names, "
+                "locations, and phone numbers with Indian conventions (e.g. +91 mobile "
+                "numbers, Indian states/cities, common Indian name structures). Do NOT "
+                "invent India-specific facts not present in the findings.\n\n"
+            )
         prompt = (
             f"Target: {target_label}\n\n"
+            f"{region_note}"
             f"Raw findings (JSON):\n{json.dumps(findings_payload, indent=2, default=str)}\n\n"
             "Produce the briefing JSON now."
         )

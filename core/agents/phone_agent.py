@@ -22,8 +22,13 @@ class PhoneAgent(BaseAgent):
             logger.warning("phonenumbers not installed")
             return [self._no_source("the 'phonenumbers' library is not installed")]
 
+        # When the user types a bare local number (no +country code), assume the
+        # configured region so an Indian 10-digit mobile parses correctly instead
+        # of failing. E.164 numbers (leading +) ignore this default.
+        from config.settings import settings
+        default_region = settings.REGION_FOCUS.upper() or None
         try:
-            parsed = phonenumbers.parse(target.phone, None)
+            parsed = phonenumbers.parse(target.phone, default_region)
         except phonenumbers.NumberParseException as e:
             return [Finding(
                 category=self.category,

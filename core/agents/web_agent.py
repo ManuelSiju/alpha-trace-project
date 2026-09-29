@@ -17,7 +17,7 @@ class WebAgent(BaseAgent):
     category = "Web Presence"
 
     MAX_RESULTS = 12
-    MAX_QUERIES = 12
+    MAX_QUERIES = 14
     SEARCH_TIMEOUT = 20  # seconds; shared budget per query (ddgs "auto" backend already
                           # fans out across multiple search engines within one call)
 
@@ -99,6 +99,13 @@ class WebAgent(BaseAgent):
             queries.append(f'"{target.name}" (portfolio OR resume OR CV OR "personal website")')
         if slug:
             queries.append(f'{slug} (portfolio OR github.io OR vercel.app OR netlify.app)')
+        # Region-focused dorks: for India, the biggest public footprints for a
+        # person are professional/job portals and India-scoped LinkedIn. These
+        # query the search engine's index (site:) -- they never scrape the
+        # portals directly, so no ToS/anti-bot issue.
+        if settings.REGION_FOCUS.upper() == "IN" and target.name:
+            queries.append(f'"{target.name}" (site:naukri.com OR site:in.linkedin.com OR site:justdial.com)')
+            queries.append(f'"{target.name}" India (profile OR resume OR contact)')
         return queries[: self.MAX_QUERIES]
 
     async def _run_one_query(self, q: str) -> tuple[str, Optional[list[dict]]]:

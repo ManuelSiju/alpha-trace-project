@@ -92,6 +92,20 @@ cp .env.example .env
 Drop a logo at `assets/alpha-trace.png` if you want one in the Streamlit GUI's header and
 sidebar; it's entirely optional and the GUI works fine without it.
 
+### Region focus
+
+`REGION_FOCUS` (in `config/settings.py` or `.env`) defaults to `IN` (India). This:
+- adds India-scoped web dorks (naukri.com, in.linkedin.com, justdial.com, India-context) —
+  all querying the search engine's index, never scraping those portals directly;
+- parses a bare 10-digit phone number as an Indian mobile (so `9876543210` validates without
+  a `+91` prefix);
+- tells the LLM to read names/locations/numbers with Indian conventions.
+
+Set `REGION_FOCUS=` (empty) for region-neutral behavior. Note: India corporate registries
+(MCA, eCourts) are **not** integrated — they're anti-bot and their ToS forbids automated
+access; SEC EDGAR (US filings) is the only business-registry source, so that part stays
+US-centric.
+
 ### CLI flags
 
 - `--plain` — no color, no box-drawing. Use for piped output, logging, or no-color terminals.

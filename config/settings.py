@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     MAX_FINDINGS_PER_CATEGORY: int = 10
     CHAT_TOP_K_EVIDENCE: int = 8
 
+    # Region focus: tailors search dorks, phone parsing default region, and the
+    # LLM's contextual awareness. "IN" = India. Set to "" for region-neutral.
+    REGION_FOCUS: str = "IN"
+
     USER_AGENTS: List[str] = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
