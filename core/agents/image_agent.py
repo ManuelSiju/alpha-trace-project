@@ -1,11 +1,26 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import List
+from urllib.parse import quote
 
 from loguru import logger
 
 from core.agents.base_agent import BaseAgent
 from core.models.schema import Target, Finding
+
+
+def reverse_image_search_urls(image_url: str) -> dict[str, str]:
+    """Build ready-to-open reverse-image-search links for a *hosted* image URL.
+    These are the real query URLs each engine accepts for by-URL search -- no
+    API key, no scraping; the analyst clicks through. (A local file can't be
+    auto-submitted this way; it must be uploaded to the engine manually.)"""
+    enc = quote(image_url, safe="")
+    return {
+        "google_lens": f"https://lens.google.com/uploadbyurl?url={enc}",
+        "yandex": f"https://yandex.com/images/search?rpt=imageview&url={enc}",
+        "bing": f"https://www.bing.com/images/search?q=imgurl:{enc}&view=detailv2&iss=sbi",
+        "tineye": f"https://tineye.com/search?url={enc}",
+    }
 
 
 class ImageAgent(BaseAgent):

@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     ENABLE_GITHUB_AGENT: bool = True
     ENABLE_WEB_AGENT: bool = True
     ENABLE_ARCHIVE_AGENT: bool = True
+    ENABLE_REGISTRY_AGENT: bool = True
 
     HEADLESS_BROWSER: bool = True
     ENABLE_PLAYWRIGHT: bool = False

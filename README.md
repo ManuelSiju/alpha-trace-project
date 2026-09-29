@@ -13,13 +13,14 @@ is not proof of ownership) — treat everything as a lead to verify, not a fact.
 
 ## What it does
 
-Given an email / username / phone / name / domain, fans out across 11 OSINT agents
+Given an email / username / phone / name / domain, fans out across 12 OSINT agents
 (Sherlock username sweep, Holehe email-to-site enumeration, GitHub profile + linked
 website/handles, DuckDuckGo-backed multi-engine search incl. portfolio discovery,
-Instaloader, PRAW, WHOIS/DNS/crt.sh, XposedOrNot breach lookup, EXIF, Gravatar public
-profile, Wayback CDX archived-page mining, and cross-platform handle correlation),
-aggregates findings, and uses a local LLM to synthesize a structured briefing + an
-interactive Q&A session ("the Consulting Room").
+Instaloader, PRAW, WHOIS/DNS/crt.sh, XposedOrNot breach lookup + exposure detail, EXIF +
+reverse-image-search links, Gravatar public profile, Wayback CDX archived-page mining,
+SEC EDGAR business-filing search, and cross-platform handle correlation), aggregates
+findings, and uses a local LLM to synthesize a structured briefing + an interactive Q&A
+session ("the Consulting Room").
 
 ## Quick start
 

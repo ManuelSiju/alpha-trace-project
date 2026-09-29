@@ -136,11 +136,17 @@ class EmailAgent(BaseAgent):
             summary_bits.append(f"linked_accounts={len(accounts)}")
         content = "; ".join(summary_bits) if summary_bits else f"Gravatar avatar exists for {email}"
 
+        # The Gravatar avatar is a public hosted image -> attach reverse-image
+        # search links so the same photo can be traced across the web.
+        from core.agents.image_agent import reverse_image_search_urls
+        avatar_hosted = f"https://www.gravatar.com/avatar/{h}?s=512"
+        reverse_urls = reverse_image_search_urls(avatar_hosted)
+
         return Finding(
             category=self.category,
             source="gravatar",
             title="Gravatar profile" + (" with public details" if summary_bits else " detected"),
-            content=content + (f"; about={about}" if about else ""),
+            content=content + (f"; about={about}" if about else "") + "; reverse-image search available",
             url=f"https://www.gravatar.com/{h}",
             confidence=88 if profile else 85,
             data={
@@ -150,6 +156,8 @@ class EmailAgent(BaseAgent):
                 "location": location,
                 "about": about or None,
                 "linked_accounts": accounts,
+                "avatar_url": avatar_hosted,
+                "reverse_image_search": reverse_urls,
             },
         )
 

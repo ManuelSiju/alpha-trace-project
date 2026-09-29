@@ -147,6 +147,36 @@ def test_breach_agent_404_returns_no_known_breaches(monkeypatch):
     assert findings[0].title == "No known breaches"
 
 
+def test_breach_agent_adds_analytics_detail(monkeypatch):
+    """When breaches exist, the analytics endpoint enriches with exposed data
+    classes + paste counts as a second finding."""
+    check_payload = {"breaches": [["Adobe", "LinkedIn"]]}
+    analytics_payload = {
+        "ExposedBreaches": {"breaches_details": [
+            {"xposed_data": "Passwords;Email addresses;Phone numbers"},
+            {"xposed_data": "Usernames;Passwords"},
+        ]},
+        "PastesSummary": {"cnt": 3},
+    }
+
+    async def _get(url, *a, **k):
+        class R:
+            status_code = 200
+            def __init__(self, p): self._p = p
+            def json(self): return self._p
+        if "breach-analytics" in url:
+            return R(analytics_payload)
+        return R(check_payload)
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeClient(_get))
+    findings = asyncio.run(BreachAgent().gather(Target(email="x@example.com")))
+    detail = next(f for f in findings if f.source == "xposedornot:analytics")
+    assert "Passwords" in detail.content
+    assert "Phone numbers" in detail.content
+    assert detail.data["paste_count"] == 3
+    assert "Passwords" in detail.data["exposed_data_classes"]
+
+
 # ------------------------------------------------------------------- ImageAgent
 
 def test_image_agent_no_path_returns_empty():
