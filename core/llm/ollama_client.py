@@ -43,18 +43,45 @@ class OllamaClient:
             logger.error(f"Ollama health check failed: {e}")
             return False
 
-    def ensure_model(self) -> None:
+    def _has_model(self, name: str) -> bool:
         try:
             models_resp = self.client.list()
-            available = [m.get("name") or m.get("model") for m in models_resp.get("models", [])]
-            if self.model not in available and not any(
-                (n or "").startswith(self.model.split(":")[0]) for n in available
-            ):
-                logger.info(f"Pulling model {self.model} (first-run download)")
-                self.client.pull(self.model)
-                logger.success(f"Model {self.model} ready")
+        except Exception:
+            return False
+        available = [m.get("name") or m.get("model") for m in models_resp.get("models", [])]
+        stem = name.split(":")[0]
+        return name in available or any((n or "").startswith(stem) for n in available)
+
+    def ensure_model(self) -> None:
+        """Ensure a usable model is present, preferring OLLAMA_MODEL and
+        falling back to OLLAMA_FALLBACK_MODEL if the primary can't be pulled
+        (e.g. not enough RAM/disk for the larger 7b). Switches self.model to
+        whichever actually landed so generation uses a model that exists."""
+        # Already have the primary?
+        if self._has_model(self.model):
+            return
+        try:
+            logger.info(f"Pulling model {self.model} (first-run download)")
+            self.client.pull(self.model)
+            logger.success(f"Model {self.model} ready")
+            return
         except Exception as e:
-            logger.error(f"Ollama model check failed: {e}")
+            fallback = settings.OLLAMA_FALLBACK_MODEL
+            if not fallback or fallback == self.model:
+                logger.error(f"Ollama model check failed: {e}")
+                raise
+            logger.warning(f"Could not pull {self.model} ({e}); falling back to {fallback}")
+
+        # Fallback path
+        self.model = settings.OLLAMA_FALLBACK_MODEL
+        if self._has_model(self.model):
+            return
+        try:
+            logger.info(f"Pulling fallback model {self.model}")
+            self.client.pull(self.model)
+            logger.success(f"Fallback model {self.model} ready")
+        except Exception as e:
+            logger.error(f"Fallback model pull also failed: {e}")
             raise
 
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=8))

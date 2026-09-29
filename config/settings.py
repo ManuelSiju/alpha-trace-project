@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     LOG_FILE: Path = BASE_DIR / "alpha_tracer.log"
 
     OLLAMA_HOST: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "qwen2.5:3b-instruct"
-    OLLAMA_FALLBACK_MODEL: str = "phi3.5:3.8b"
+    OLLAMA_MODEL: str = "qwen2.5:7b-instruct"
+    OLLAMA_FALLBACK_MODEL: str = "qwen2.5:3b-instruct"
     OLLAMA_NUM_CTX: int = 8192
     LLM_TEMPERATURE: float = 0.6
     LLM_MAX_TOKENS: int = 2000

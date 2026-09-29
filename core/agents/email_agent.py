@@ -88,24 +88,70 @@ class EmailAgent(BaseAgent):
 
     async def _gravatar(self, email: str) -> Finding | None:
         h = hashlib.md5(email.encode("utf-8")).hexdigest()
-        url = f"https://www.gravatar.com/avatar/{h}?d=404"
+        avatar_url = f"https://www.gravatar.com/avatar/{h}?d=404"
         profile_url = f"https://www.gravatar.com/{h}.json"
         try:
-            async with httpx.AsyncClient(timeout=10, headers=default_headers()) as c:
-                r = await c.head(url)
-                if r.status_code == 200:
-                    return Finding(
-                        category=self.category,
-                        source="gravatar",
-                        title="Gravatar profile detected",
-                        content=f"Gravatar avatar exists for {email}",
-                        url=f"https://www.gravatar.com/{h}",
-                        confidence=85,
-                        data={"hash": h, "json_url": profile_url},
-                    )
+            async with httpx.AsyncClient(timeout=10, headers=default_headers(), follow_redirects=True) as c:
+                r = await c.head(avatar_url)
+                if r.status_code != 200:
+                    return None
+                # Avatar exists -> pull the public profile JSON, which frequently
+                # carries the real name, location, bio, and a list of the
+                # person's own linked accounts (their own self-published data,
+                # not scraped). This is the single richest free signal Gravatar
+                # gives and was previously ignored.
+                profile: Dict[str, Any] = {}
+                try:
+                    pr = await c.get(profile_url)
+                    if pr.status_code == 200:
+                        entries = (pr.json() or {}).get("entry") or []
+                        if entries:
+                            profile = entries[0]
+                except Exception as e:
+                    logger.debug(f"gravatar profile fetch failed: {e}")
         except Exception as e:
             logger.debug(f"gravatar check failed: {e}")
-        return None
+            return None
+
+        display = profile.get("displayName") or profile.get("preferredUsername")
+        name = (profile.get("name") or {})
+        full_name = " ".join(v for v in [name.get("givenName"), name.get("familyName")] if v).strip()
+        location = profile.get("currentLocation")
+        about = ""
+        if profile.get("aboutMe"):
+            about = profile["aboutMe"][:200]
+        accounts = [
+            a.get("url") for a in (profile.get("accounts") or [])
+            if isinstance(a, dict) and a.get("url")
+        ]
+
+        summary_bits = []
+        if display:
+            summary_bits.append(f"display={display}")
+        if full_name:
+            summary_bits.append(f"name={full_name}")
+        if location:
+            summary_bits.append(f"location={location}")
+        if accounts:
+            summary_bits.append(f"linked_accounts={len(accounts)}")
+        content = "; ".join(summary_bits) if summary_bits else f"Gravatar avatar exists for {email}"
+
+        return Finding(
+            category=self.category,
+            source="gravatar",
+            title="Gravatar profile" + (" with public details" if summary_bits else " detected"),
+            content=content + (f"; about={about}" if about else ""),
+            url=f"https://www.gravatar.com/{h}",
+            confidence=88 if profile else 85,
+            data={
+                "hash": h,
+                "display_name": display,
+                "full_name": full_name or None,
+                "location": location,
+                "about": about or None,
+                "linked_accounts": accounts,
+            },
+        )
 
     async def _run_holehe(self, email: str) -> List[Finding]:
         bin_path = shutil.which("holehe") or self._venv_bin("holehe")

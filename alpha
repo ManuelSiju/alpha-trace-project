@@ -82,10 +82,16 @@ if command -v ollama >/dev/null 2>&1; then
         done
     fi
 
-    MODEL="$(.venv/bin/python -c 'from config.settings import settings; print(settings.OLLAMA_MODEL)' 2>/dev/null || echo qwen2.5:3b-instruct)"
+    MODEL="$(.venv/bin/python -c 'from config.settings import settings; print(settings.OLLAMA_MODEL)' 2>/dev/null || echo qwen2.5:7b-instruct)"
+    FALLBACK="$(.venv/bin/python -c 'from config.settings import settings; print(settings.OLLAMA_FALLBACK_MODEL)' 2>/dev/null || echo qwen2.5:3b-instruct)"
     if command -v ollama >/dev/null 2>&1 && ! ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$MODEL"; then
-        echo "Pulling model $MODEL (first run, a few GB)..."
-        ollama pull "$MODEL" || echo "Warning: model pull failed; Alpha-Tracer will fall back to a deterministic briefing until it succeeds."
+        echo "Pulling model $MODEL (first run, ~5 GB)..."
+        if ! ollama pull "$MODEL"; then
+            echo "Primary model pull failed (likely low RAM/disk) — falling back to $FALLBACK..."
+            if ! ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$FALLBACK"; then
+                ollama pull "$FALLBACK" || echo "Warning: fallback pull failed too; Alpha-Tracer will use a deterministic briefing until a model is available."
+            fi
+        fi
     fi
 else
     echo "Ollama still not available — Alpha-Tracer will run with a deterministic fallback briefing."

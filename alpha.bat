@@ -67,11 +67,18 @@ if not errorlevel 1 (
     )
 
     for /f "usebackq delims=" %%m in (`".venv\Scripts\python.exe" -c "from config.settings import settings; print(settings.OLLAMA_MODEL)" 2^>nul`) do set "MODEL=%%m"
-    if not defined MODEL set "MODEL=qwen2.5:3b-instruct"
+    if not defined MODEL set "MODEL=qwen2.5:7b-instruct"
+    for /f "usebackq delims=" %%f in (`".venv\Scripts\python.exe" -c "from config.settings import settings; print(settings.OLLAMA_FALLBACK_MODEL)" 2^>nul`) do set "FALLBACK=%%f"
+    if not defined FALLBACK set "FALLBACK=qwen2.5:3b-instruct"
     ollama list | findstr /C:"%MODEL%" >nul
     if errorlevel 1 (
-        echo Pulling model %MODEL% ^(first run, a few GB^)...
+        echo Pulling model %MODEL% ^(first run, ~5 GB^)...
         ollama pull "%MODEL%"
+        if errorlevel 1 (
+            echo Primary model pull failed ^(likely low RAM/disk^) -- falling back to %FALLBACK%...
+            ollama list | findstr /C:"%FALLBACK%" >nul
+            if errorlevel 1 ollama pull "%FALLBACK%"
+        )
     )
 ) else (
     echo Ollama still not available — Alpha-Tracer will run with a deterministic fallback briefing.
