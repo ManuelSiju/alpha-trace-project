@@ -26,6 +26,8 @@ git clone <this repo>
 cd alpha-trace-project
 ./alpha              # macOS/Linux
 alpha.bat            # Windows
+# or, if you have `make`:
+make run
 ```
 
 That's it — `./alpha` / `alpha.bat` provisions everything itself:
