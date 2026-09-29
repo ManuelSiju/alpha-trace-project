@@ -39,6 +39,7 @@ CATEGORY_ICONS = {
     "Breach Exposure": "⚠",
     "Phone Intelligence": "☏",
     "Image Metadata": "▣",
+    "Archived Web": "⌛",
 }
 
 # Block-letter ALPHA-TRACER, easily readable

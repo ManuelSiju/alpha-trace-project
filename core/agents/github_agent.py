@@ -34,15 +34,45 @@ class GitHubAgent(BaseAgent):
                         r = await c.get(f"{self.BASE}/users/{val}")
                         if r.status_code == 200:
                             d = r.json()
+                            # blog = often a personal portfolio URL; twitter_username
+                            # = a directly-linked cross-platform handle; company/email
+                            # are self-published. These are the highest-value fields on
+                            # the profile and were previously fetched but never surfaced.
+                            extra = []
+                            if d.get("blog"):
+                                extra.append(f"website={d['blog']}")
+                            if d.get("twitter_username"):
+                                extra.append(f"twitter=@{d['twitter_username']}")
+                            if d.get("company"):
+                                extra.append(f"company={d['company']}")
+                            if d.get("email"):
+                                extra.append(f"email={d['email']}")
+                            extra_str = ("; " + "; ".join(extra)) if extra else ""
                             findings.append(Finding(
                                 category=self.category,
                                 source="github:user",
                                 title=f"GitHub user @{val}",
-                                content=f"name={d.get('name')}; bio={d.get('bio')}; repos={d.get('public_repos')}; followers={d.get('followers')}; location={d.get('location')}",
+                                content=f"name={d.get('name')}; bio={d.get('bio')}; repos={d.get('public_repos')}; followers={d.get('followers')}; location={d.get('location')}{extra_str}",
                                 url=d.get("html_url"),
                                 confidence=92,
-                                data=d,
+                                data={**d, "handle": val},
                             ))
+                            # A public website/blog on the profile is a strong lead in
+                            # its own right (usually the portfolio) -- emit it separately
+                            # so it lands in Connections and can be searched further.
+                            if d.get("blog"):
+                                blog = d["blog"]
+                                if not blog.startswith("http"):
+                                    blog = "https://" + blog
+                                findings.append(Finding(
+                                    category=self.category,
+                                    source="github:website",
+                                    title=f"Personal website linked from GitHub @{val}",
+                                    content=f"Self-published website: {blog}",
+                                    url=blog,
+                                    confidence=80,
+                                    data={"handle": val, "website": blog},
+                                ))
                     elif kind == "email_search":
                         r = await c.get(f"{self.BASE}/search/users", params={"q": f"{val} in:email"})
                         if r.status_code == 200:

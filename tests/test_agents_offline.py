@@ -265,3 +265,41 @@ def test_github_agent_non_200_returns_empty(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeClient(_get))
     findings = asyncio.run(GitHubAgent().gather(Target(username="somebody")))
     assert findings == []
+
+
+def test_github_agent_surfaces_website_and_linked_handles(monkeypatch):
+    """blog/twitter_username/company are the highest-value profile fields;
+    the website also becomes its own finding so it lands in Connections."""
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {
+                "name": "Jamie Carter", "bio": "dev", "public_repos": 12,
+                "followers": 30, "location": "Metropolis",
+                "html_url": "https://github.com/jcarter",
+                "blog": "jcarter.dev", "twitter_username": "jcarterx",
+                "company": "@ExampleCorp", "email": "jamie@example.com",
+            }
+
+    async def _get(url, *a, **k):
+        # only the /users/<login> lookup returns the profile; searches return empty
+        if "/users/" in url:
+            return FakeResp()
+        class Empty:
+            status_code = 200
+            def json(self):
+                return {"items": []}
+        return Empty()
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeClient(_get))
+    findings = asyncio.run(GitHubAgent().gather(Target(username="jcarter")))
+
+    user_f = next(f for f in findings if f.source == "github:user")
+    assert "website=jcarter.dev" in user_f.content
+    assert "twitter=@jcarterx" in user_f.content
+    assert user_f.data["handle"] == "jcarter"
+
+    site_f = next(f for f in findings if f.source == "github:website")
+    assert site_f.url == "https://jcarter.dev"
+    assert site_f.data["handle"] == "jcarter"

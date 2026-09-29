@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     ENABLE_PEOPLE_SEARCH_AGENT: bool = True
     ENABLE_GITHUB_AGENT: bool = True
     ENABLE_WEB_AGENT: bool = True
+    ENABLE_ARCHIVE_AGENT: bool = True
 
     HEADLESS_BROWSER: bool = True
     ENABLE_PLAYWRIGHT: bool = False

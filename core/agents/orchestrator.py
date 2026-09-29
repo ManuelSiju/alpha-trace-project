@@ -75,6 +75,7 @@ def build_default_agents() -> List[BaseAgent]:
     from core.agents.breach_agent import BreachAgent
     from core.agents.image_agent import ImageAgent
     from core.agents.people_search_agent import PeopleSearchAgent
+    from core.agents.archive_agent import ArchiveAgent
 
     pool: List[BaseAgent] = []
     if settings.ENABLE_EMAIL_AGENT:
@@ -97,4 +98,6 @@ def build_default_agents() -> List[BaseAgent]:
         pool.append(ImageAgent())
     if settings.ENABLE_PEOPLE_SEARCH_AGENT:
         pool.append(PeopleSearchAgent())
+    if settings.ENABLE_ARCHIVE_AGENT:
+        pool.append(ArchiveAgent())
     return pool
