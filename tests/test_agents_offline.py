@@ -312,15 +312,25 @@ def test_github_agent_surfaces_website_and_linked_handles(monkeypatch):
                 "company": "@ExampleCorp", "email": "jamie@example.com",
             }
 
+    class _Json:
+        def __init__(self, payload):
+            self.status_code = 200
+            self._p = payload
+        def json(self):
+            return self._p
+
     async def _get(url, *a, **k):
-        # only the /users/<login> lookup returns the profile; searches return empty
-        if "/users/" in url:
+        # exact profile lookup returns the profile; deep-dive endpoints and
+        # searches return empty collections
+        if url.rstrip("/").endswith("/users/jcarter"):
             return FakeResp()
-        class Empty:
-            status_code = 200
-            def json(self):
-                return {"items": []}
-        return Empty()
+        if url.endswith("/repos"):
+            return _Json([])
+        if url.endswith("/events/public"):
+            return _Json([])
+        if url.endswith("/following"):
+            return _Json([])
+        return _Json({"items": []})
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeClient(_get))
     findings = asyncio.run(GitHubAgent().gather(Target(username="jcarter")))
@@ -333,3 +343,64 @@ def test_github_agent_surfaces_website_and_linked_handles(monkeypatch):
     site_f = next(f for f in findings if f.source == "github:website")
     assert site_f.url == "https://jcarter.dev"
     assert site_f.data["handle"] == "jcarter"
+
+
+def test_github_deep_dive_repos_commits_following(monkeypatch):
+    """A confirmed account triggers repo mining (skills + linked sites), commit
+    email extraction (real email behind the account), and following-graph."""
+    profile = {
+        "login": "jcarter", "name": "Jamie Carter", "public_repos": 3,
+        "followers": 5, "html_url": "https://github.com/jcarter",
+    }
+    repos = [
+        {"name": "portfolio", "language": "TypeScript", "topics": ["react", "portfolio"],
+         "stargazers_count": 12, "homepage": "https://jamie.dev", "html_url": "x",
+         "description": "my site"},
+        {"name": "cli-tool", "language": "Python", "topics": ["cli"],
+         "stargazers_count": 3, "homepage": "", "html_url": "y", "description": None},
+    ]
+    events = [{
+        "type": "PushEvent",
+        "payload": {"commits": [
+            {"author": {"email": "jamie.real@gmail.com", "name": "Jamie Carter"}},
+            {"author": {"email": "12345+jcarter@users.noreply.github.com", "name": "jc"}},
+        ]},
+    }]
+    following = [{"login": "colleague1"}, {"login": "colleague2"}]
+
+    class _Json:
+        def __init__(self, p):
+            self.status_code = 200
+            self._p = p
+        def json(self):
+            return self._p
+
+    async def _get(url, *a, **k):
+        if url.rstrip("/").endswith("/users/jcarter"):
+            return _Json(profile)
+        if url.endswith("/repos"):
+            return _Json(repos)
+        if url.endswith("/events/public"):
+            return _Json(events)
+        if url.endswith("/following"):
+            return _Json(following)
+        return _Json({"items": []})
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeClient(_get))
+    findings = asyncio.run(GitHubAgent().gather(Target(username="jcarter")))
+    srcs = {f.source for f in findings}
+    assert {"github:repos", "github:commit-emails", "github:following"} <= srcs
+
+    repo_f = next(f for f in findings if f.source == "github:repos")
+    assert "TypeScript" in repo_f.content and "Python" in repo_f.content
+
+    # repo homepage becomes its own portfolio lead
+    assert any(f.source == "github:repo-site" and f.url == "https://jamie.dev" for f in findings)
+
+    # real commit email surfaced, noreply filtered out
+    email_f = next(f for f in findings if f.source == "github:commit-emails")
+    assert "jamie.real@gmail.com" in email_f.data["emails"]
+    assert all("noreply.github.com" not in e for e in email_f.data["emails"])
+
+    follow_f = next(f for f in findings if f.source == "github:following")
+    assert "colleague1" in follow_f.data["following"]
