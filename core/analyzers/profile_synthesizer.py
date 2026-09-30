@@ -8,7 +8,7 @@ from loguru import logger
 
 from core.models.schema import Target, Finding, Briefing, BriefingCategory
 from core.llm.ollama_client import get_llm, OllamaUnavailable
-from core.analyzers.entity_resolver import dedupe_findings
+from core.analyzers.entity_resolver import dedupe_findings, correlation_finding
 from config.settings import settings
 
 # Exact 4-digit years — used to build the allowlist of years actually in findings.
@@ -207,6 +207,14 @@ def synthesize(target: Target, findings: List[Finding], elapsed: float = 0.0) ->
     findings = dedupe_findings(findings)
     if not findings:
         return Briefing.empty(target.primary_identifier())
+
+    # Cross-source correlation runs before synthesis so the LLM sees which
+    # accounts/emails/names are corroborated (same person, multiple independent
+    # sources) vs. single-source leads -- this is what lets it state, with
+    # justified confidence, which accounts are actually the target's.
+    corr = correlation_finding(findings)
+    if corr:
+        findings = [corr] + findings
 
     t0 = time.monotonic()
     llm_findings = _rank_for_llm(findings)

@@ -40,6 +40,7 @@ CATEGORY_ICONS = {
     "Phone Intelligence": "☏",
     "Image Metadata": "▣",
     "Archived Web": "⌛",
+    "Identity Correlation": "⊹",
 }
 
 # Block-letter ALPHA-TRACER, easily readable
